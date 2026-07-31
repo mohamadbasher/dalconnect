@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "DalConnect",
+    "slug": "dalconnect",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "dalconnect",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#c25d27"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.dalconnect.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "DalConnect uses your location to find professionals near you and share your address for bookings."
+      }
+    },
+    "android": {
+      "package": "com.dalconnect.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#c25d27"
+      },
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-notifications",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "DalConnect uses your location to find professionals near you."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "DalConnect needs photo access so you can attach pictures to bookings and chat."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

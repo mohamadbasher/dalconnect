@@ -1,0 +1,12 @@
+node_modules/
+.expo/
+dist/
+.next/
+*.log
+.env
+.env.local
+.supabase-dbpass.txt
+.expo-export-test/
+.DS_Store
+expo-env.d.ts
+.turbo/
