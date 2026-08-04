@@ -8,7 +8,8 @@ import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
-import { Button, Card, EmptyState, Loading, SectionHeader } from "../../components/ui";
+import { Button, Card, EmptyState, SectionHeader, SkeletonList } from "../../components/ui";
+import { EarningsBarGraph, type EarningsBar } from "../../components/EarningsBarGraph";
 import type { Transaction } from "../../lib/types";
 
 type Row =
@@ -80,6 +81,30 @@ export default function EarningsScreen() {
     return { totalNet: total, monthNet: month, monthTxCount: monthCount, totalCommission: comm, rows: out };
   }, [txs, lang]);
 
+  // last 7 days of net earnings (oldest -> newest; the graph lays out RTL itself)
+  const { weekBars, weekTotal } = useMemo(() => {
+    const locale = lang === "ar" ? "ar" : "he-IL";
+    const byDay = new Map<string, number>();
+    for (const tx of txs) {
+      const d = new Date(tx.created_at);
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      byDay.set(key, (byDay.get(key) ?? 0) + Number(tx.net));
+    }
+    const out: EarningsBar[] = [];
+    let sum = 0;
+    const today = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+      const value = byDay.get(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`) ?? 0;
+      sum += value;
+      out.push({
+        label: d.toLocaleDateString(locale, { weekday: "narrow" }),
+        value,
+      });
+    }
+    return { weekBars: out, weekTotal: sum };
+  }, [txs, lang]);
+
   if (!isPro || !professional || !uid) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: "center", padding: spacing.lg }}>
@@ -89,7 +114,7 @@ export default function EarningsScreen() {
     );
   }
 
-  if (loading) return <Loading />;
+  if (loading) return <SkeletonList count={4} />;
 
   const StatTile = ({
     label,
@@ -131,6 +156,20 @@ export default function EarningsScreen() {
 
   const header = (
     <View style={{ gap: spacing.lg, marginBottom: spacing.md }}>
+      {txs.length ? (
+        <Card style={{ gap: spacing.md }}>
+          <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
+            <Text style={[RTL_TEXT, { color: colors.text, fontSize: 15, fontWeight: "800" }]}>
+              {t("last7DaysTitle")}
+            </Text>
+            <Text style={{ color: colors.brand, fontSize: 13.5, fontWeight: "800" }}>
+              {t("last7DaysTotal", { amount: formatPrice(weekTotal) })}
+            </Text>
+          </View>
+          <EarningsBarGraph bars={weekBars} />
+        </Card>
+      ) : null}
+
       <View style={{ ...ROW, gap: spacing.md, alignItems: "stretch" }}>
         <StatTile label={t("totalNet")} value={formatPrice(totalNet)} icon="cash-multiple" big />
         <StatTile label={t("thisMonthNet")} value={formatPrice(monthNet)} icon="calendar-month-outline" />

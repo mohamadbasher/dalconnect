@@ -13,7 +13,6 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
-import * as Haptics from "expo-haptics";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,11 +25,13 @@ import { formatDateTime, STATUS_KEY } from "../../lib/format";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
 import { Avatar, Badge, Button, Card, EmptyState, Input, Loading, SectionHeader, StarRating } from "../../components/ui";
 import { RateModal } from "../../components/RateModal";
+import { useToast } from "../../components/Toast";
 import type { Booking, BookingStatus, Offer, Review } from "../../lib/types";
 
 type MCIName = keyof typeof MaterialCommunityIcons.glyphMap;
 
-const STEP_ICONS: MCIName[] = ["bullhorn", "check-bold", "truck-fast", "progress-wrench", "flag-checkered"];
+/** cancelling is off the table once the pro is actually working (or the job is done) */
+const CANCEL_LOCKED: BookingStatus[] = ["on_the_way", "in_progress", "completed", "rated"];
 
 function stepIndex(status: BookingStatus): number {
   switch (status) {
@@ -71,6 +72,7 @@ export default function BookingDetail() {
   const { colors, shadows } = useTheme();
   const { t, lang, loc } = useI18n();
   const { session } = useAuth();
+  const toast = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -161,11 +163,11 @@ export default function BookingDetail() {
           const { error } = await supabase.rpc("accept_offer", { p_offer_id: offer.id });
           setAcceptingId(null);
           if (error) {
-            Alert.alert(t("error"));
+            toast.error(t("error"));
             load();
             return;
           }
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          toast.success(t("offerAcceptedToast", { name }));
           load();
         },
       },
@@ -182,10 +184,11 @@ export default function BookingDetail() {
     setCancelling(false);
     setCancelVisible(false);
     if (error) {
-      Alert.alert(t("error"));
+      toast.error(t("error"));
       return;
     }
     setCancelReason("");
+    toast.info(t("bookingCancelledToast"));
     load();
   };
 
@@ -196,7 +199,7 @@ export default function BookingDetail() {
       const convId = await getOrCreateConversation(booking.customer_id, booking.professional_id);
       router.push(`/chat/${convId}` as never);
     } catch {
-      Alert.alert(t("error"));
+      toast.error(t("error"));
     } finally {
       setChatLoading(false);
     }
@@ -244,6 +247,7 @@ export default function BookingDetail() {
   const proName = pro ? pro.business_name || pro.profile?.full_name || "" : "";
   const proPhone = pro?.profile?.phone ?? "";
   const canCancel = booking.status === "open" || booking.status === "pending" || booking.status === "accepted";
+  const cancelLocked = CANCEL_LOCKED.includes(booking.status);
   const showProCard = pro !== null && booking.status !== "open";
 
   return (
@@ -278,58 +282,57 @@ export default function BookingDetail() {
         ) : (
           <View style={{ gap: spacing.md }}>
             <SectionHeader title={t("bookingStatus")} />
-            <Card style={{ gap: 0 }}>
-              {steps.map((s, i) => {
-                const done = i <= currentIdx;
-                const isLast = i === steps.length - 1;
-                return (
-                  <View key={s} style={{ ...ROW, gap: 12, alignItems: "flex-start" }}>
-                    <View style={{ alignItems: "center" }}>
-                      <View
-                        style={{
-                          width: 34,
-                          height: 34,
-                          borderRadius: 17,
-                          backgroundColor: done ? colors.brand : colors.chip,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          ...(i === currentIdx ? shadows.cta : null),
-                        }}
-                      >
-                        <MaterialCommunityIcons
-                          name={STEP_ICONS[i]}
-                          size={17}
-                          color={done ? colors.onBrand : colors.faint}
-                        />
-                      </View>
-                      {!isLast ? (
+            <Card style={{ gap: spacing.md }}>
+              {/* horizontal tracker: dots on a connector rail */}
+              <View style={{ flexDirection: "row-reverse", justifyContent: "space-between" }}>
+                {steps.map((s, i) => {
+                  const done = i <= currentIdx;
+                  const current = i === currentIdx;
+                  return (
+                    <View key={s} style={{ flex: 1, alignItems: "center", gap: 6 }}>
+                      {i > 0 ? (
+                        // the rail runs from this dot back to the previous one (RTL: to its right)
                         <View
                           style={{
-                            width: 2.5,
-                            height: 22,
-                            borderRadius: 2,
-                            backgroundColor: i < currentIdx ? colors.brand : colors.border,
+                            position: "absolute",
+                            height: 3,
+                            top: 9.5,
+                            right: "-50%",
+                            width: "100%",
+                            backgroundColor: done ? colors.brand : colors.border,
                           }}
                         />
                       ) : null}
+                      <View
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: radius.full,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderWidth: 2,
+                          backgroundColor: done ? colors.brand : colors.chip,
+                          borderColor: done ? colors.brand : colors.border,
+                          ...(current ? shadows.cta : null),
+                        }}
+                      >
+                        {done ? <Ionicons name="checkmark" size={12} color={colors.onBrand} /> : null}
+                      </View>
+                      <Text
+                        numberOfLines={2}
+                        style={{
+                          fontSize: 11,
+                          textAlign: "center",
+                          color: done ? colors.text : colors.muted,
+                          fontWeight: done ? "700" : "500",
+                        }}
+                      >
+                        {t(STATUS_KEY[s === "completed" && booking.status === "rated" ? "rated" : s])}
+                      </Text>
                     </View>
-                    <Text
-                      style={[
-                        RTL_TEXT,
-                        {
-                          flex: 1,
-                          paddingTop: 7,
-                          fontSize: 14.5,
-                          fontWeight: i === currentIdx ? "800" : "600",
-                          color: done ? colors.text : colors.faint,
-                        },
-                      ]}
-                    >
-                      {t(STATUS_KEY[s === "completed" && booking.status === "rated" ? "rated" : s])}
-                    </Text>
-                  </View>
-                );
-              })}
+                  );
+                })}
+              </View>
             </Card>
           </View>
         )}
@@ -596,6 +599,39 @@ export default function BookingDetail() {
             >
               <Ionicons name="close-circle-outline" size={18} color={colors.danger} />
               <Text style={{ color: colors.danger, fontSize: 15, fontWeight: "700" }}>{t("cancelBooking")}</Text>
+            </Pressable>
+          ) : null}
+
+          {/* Once the pro is on the job the cancel button is gone; without this the
+              customer is left wondering how to call it off. */}
+          {cancelLocked ? (
+            <Pressable
+              onPress={openChat}
+              disabled={!booking.professional_id || chatLoading}
+              style={({ pressed }) => ({
+                ...ROW,
+                gap: 8,
+                backgroundColor: colors.warnTint,
+                borderRadius: radius.md,
+                paddingHorizontal: 12,
+                paddingVertical: 12,
+                opacity: pressed ? 0.75 : 1,
+              })}
+            >
+              <Ionicons name="lock-closed-outline" size={17} color={colors.warn} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[RTL_TEXT, { color: colors.warn, fontSize: 12.5, lineHeight: 18 }]}>
+                  {booking.status === "completed" || booking.status === "rated"
+                    ? t("cancelLockedDone")
+                    : t("cancelLockedWorking")}
+                </Text>
+                {booking.professional_id ? (
+                  <Text style={[RTL_TEXT, { color: colors.warn, fontSize: 12.5, fontWeight: "800" }]}>
+                    {t("contactProCta")}
+                  </Text>
+                ) : null}
+              </View>
+              {booking.professional_id ? <Ionicons name="chevron-back" size={16} color={colors.warn} /> : null}
             </Pressable>
           ) : null}
           <Button

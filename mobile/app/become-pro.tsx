@@ -1,7 +1,6 @@
 // Become-a-professional upgrade wizard: business info -> categories -> ID verification.
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -25,12 +24,14 @@ import { fetchCategories, fetchCities } from "../lib/refdata";
 import { uploadImage } from "../lib/upload";
 import { ROW, RTL_TEXT } from "../lib/rtl";
 import { Button, Chip, Input, Loading, SearchBar } from "../components/ui";
+import { useToast } from "../components/Toast";
 import type { Category, City } from "../lib/types";
 
 export default function BecomeProScreen() {
   const { colors, shadows } = useTheme();
   const { t, loc } = useI18n();
   const { session, isPro, professional, refresh, setMode } = useAuth();
+  const toast = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const uid = session?.user?.id ?? null;
@@ -75,6 +76,21 @@ export default function BecomeProScreen() {
     return cities.filter((c) => c.name_ar.includes(q) || c.name_he.includes(q));
   }, [cities, citySearch]);
 
+  // ---- completion meter (guidance only — per-step validation still governs submit) ----
+  const checks = useMemo(
+    () => [
+      { key: "businessName", label: t("checkBusinessName"), done: businessName.trim().length >= 2 },
+      { key: "bio", label: t("checkBio"), done: bio.trim().length >= 10 },
+      { key: "city", label: t("checkCity"), done: cityId != null },
+      { key: "categories", label: t("checkCategory"), done: selectedCats.length > 0 },
+      { key: "idDoc", label: t("checkIdDoc"), done: !!idPath },
+    ],
+    [businessName, bio, cityId, selectedCats.length, idPath, t]
+  );
+  const doneCount = checks.filter((c) => c.done).length;
+  const pct = Math.round((doneCount / checks.length) * 100);
+  const complete = doneCount === checks.length;
+
   if (isPro && professional && !submittedRef.current) {
     return <Redirect href="/(tabs)/dashboard" />;
   }
@@ -105,7 +121,7 @@ export default function BecomeProScreen() {
     } catch {
       setIdLocalUri(null);
       setIdPath(null);
-      Alert.alert(t("uploadFailed"));
+      toast.error(t("uploadFailed"));
     } finally {
       setUploading(false);
     }
@@ -115,7 +131,7 @@ export default function BecomeProScreen() {
     setSelectedCats((prev) => {
       if (prev.includes(id)) return prev.filter((c) => c !== id);
       if (prev.length >= 5) {
-        Alert.alert(t("maxCategoriesMsg"));
+        toast.info(t("maxCategoriesMsg"));
         return prev;
       }
       return [...prev, id];
@@ -131,7 +147,7 @@ export default function BecomeProScreen() {
       setStep(1);
     } else if (step === 1) {
       if (selectedCats.length === 0) {
-        Alert.alert(t("minCategoriesMsg"));
+        toast.info(t("minCategoriesMsg"));
         return;
       }
       setStep(2);
@@ -153,9 +169,10 @@ export default function BecomeProScreen() {
       await refresh();
       setMode("pro");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      toast.success(t("proCreated"));
       router.replace("/(tabs)/dashboard");
     } catch {
-      Alert.alert(t("error"));
+      toast.error(t("error"));
     } finally {
       setSubmitting(false);
     }
@@ -210,6 +227,55 @@ export default function BecomeProScreen() {
           contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl }}
           keyboardShouldPersistTaps="handled"
         >
+          {/* completion meter — guidance, always visible across steps */}
+          <View
+            style={{
+              backgroundColor: colors.card,
+              borderRadius: radius.lg,
+              padding: 14,
+              gap: 10,
+              ...shadows.card,
+            }}
+          >
+            <View style={{ ...ROW, gap: 12 }}>
+              <Text style={{ fontSize: 24, fontWeight: "900", color: complete ? colors.success : colors.brand }}>
+                {pct}%
+              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[RTL_TEXT, { fontSize: 15, fontWeight: "800", color: colors.text }]}>
+                  {t("completionTitle")}
+                </Text>
+                <Text style={[RTL_TEXT, { fontSize: 12, color: colors.muted, marginTop: 1 }]}>
+                  {complete ? t("completionReady") : t("completionRemaining", { count: checks.length - doneCount })}
+                </Text>
+              </View>
+            </View>
+            <View style={{ height: 7, borderRadius: radius.full, backgroundColor: colors.chip, overflow: "hidden" }}>
+              <View
+                style={{
+                  height: "100%",
+                  width: `${pct}%`,
+                  borderRadius: radius.full,
+                  backgroundColor: complete ? colors.success : colors.brand,
+                }}
+              />
+            </View>
+            <View style={{ ...ROW, flexWrap: "wrap", gap: 10, justifyContent: "flex-start", marginTop: 2 }}>
+              {checks.map((c) => (
+                <View key={c.key} style={{ ...ROW, gap: 4 }}>
+                  <Ionicons
+                    name={c.done ? "checkmark-circle" : "ellipse-outline"}
+                    size={15}
+                    color={c.done ? colors.success : colors.border}
+                  />
+                  <Text style={{ fontSize: 11.5, fontWeight: "600", color: c.done ? colors.text : colors.muted }}>
+                    {c.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
           {step === 0 ? (
             <View style={{ gap: spacing.lg }}>
               <Input
@@ -376,7 +442,7 @@ export default function BecomeProScreen() {
             <Text style={[RTL_TEXT, { color: colors.text, fontSize: 16, fontWeight: "800" }]}>
               {t("selectCity")}
             </Text>
-            <SearchBar value={citySearch} onChangeText={setCitySearch} placeholder={t("searchCity")} />
+            <SearchBar value={citySearch} onChangeText={setCitySearch} placeholder={t("proSearchCity")} />
             <FlatList
               data={filteredCities}
               keyExtractor={(c) => String(c.id)}

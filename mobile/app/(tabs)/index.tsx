@@ -20,8 +20,8 @@ import { useAuth } from "../../context/AuthContext";
 import { fetchCategories } from "../../lib/refdata";
 import { STATUS_KEY, STATUS_TONE } from "../../lib/format";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
-import { Badge, Button, EmptyState, Loading, SectionHeader } from "../../components/ui";
-import { ProCard } from "../../components/ProCard";
+import { Badge, Button, EmptyState, SectionHeader, SkeletonList } from "../../components/ui";
+import { ProCard, isFeaturedNow } from "../../components/ProCard";
 import type { Banner, Booking, Category, ProCard as ProCardType } from "../../lib/types";
 
 const PRO_SELECT =
@@ -148,6 +148,7 @@ export default function HomeScreen() {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
   const [pros, setPros] = useState<ProCardType[]>([]);
+  const [featured, setFeatured] = useState<ProCardType[]>([]);
   const [activeBooking, setActiveBooking] = useState<Booking | null>(null);
   const [offersCount, setOffersCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -181,8 +182,9 @@ export default function HomeScreen() {
 
   const load = useCallback(async () => {
     setError(false);
+    const nowIso = new Date().toISOString();
     // Load each section independently so one failure never blanks the others.
-    const [bRes, cRes, pRes] = await Promise.allSettled([
+    const [bRes, cRes, pRes, fRes] = await Promise.allSettled([
       supabase.from("banners").select("*").eq("is_active", true).order("sort_order"),
       fetchCategories(true),
       supabase
@@ -193,6 +195,16 @@ export default function HomeScreen() {
         .order("rating_count", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(5),
+      // promoted placement (paid): featured flag + a window that hasn't expired
+      supabase
+        .from("professionals")
+        .select(PRO_SELECT)
+        .eq("profile.is_banned", false)
+        .eq("featured", true)
+        .or(`featured_until.is.null,featured_until.gt.${nowIso}`)
+        .order("featured_sort", { ascending: true })
+        .order("rating_avg", { ascending: false })
+        .limit(10),
       loadActiveBooking(),
     ]);
 
@@ -200,6 +212,15 @@ export default function HomeScreen() {
       setBanners((bRes.value.data as Banner[]) ?? []);
     }
     if (cRes.status === "fulfilled") setCats(cRes.value);
+
+    if (fRes.status === "fulfilled" && !fRes.value.error) {
+      // re-check client-side: the window can lapse between the query and render
+      setFeatured(
+        ((fRes.value.data as any[]) ?? []).filter((r) => isFeaturedNow(r)).map(mapPro)
+      );
+    } else {
+      setFeatured([]); // promo row is never essential — just hide it
+    }
 
     if (pRes.status === "fulfilled" && !pRes.value.error) {
       setPros(((pRes.value.data as any[]) ?? []).map(mapPro));
@@ -245,11 +266,12 @@ export default function HomeScreen() {
   };
 
   if (!session) return null; // tabs layout redirects; safety guard
-  if (loading) return <Loading />;
+  if (loading) return <SkeletonList count={5} />;
 
   const tileGap = spacing.md;
   const tileW = (width - spacing.lg * 2 - tileGap * 3) / 4;
   const bannerW = width - spacing.lg * 2;
+  const featuredW = Math.min(width - spacing.lg * 2, width * 0.84);
 
   const header = (
     <View style={{ gap: spacing.lg }}>
@@ -428,6 +450,30 @@ export default function HomeScreen() {
             {t("error")}
           </Text>
           <Button title={t("retry")} variant="outline" small onPress={onRefresh} />
+        </View>
+      ) : null}
+
+      {/* 5.5 — promoted professionals (paid placement); hidden entirely when empty */}
+      {featured.length > 0 ? (
+        <View>
+          <SectionHeader title={t("homeFeatured")} />
+          <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12, marginBottom: spacing.sm }]}>
+            {t("homeFeaturedSubtitle")}
+          </Text>
+          <FlatList
+            data={featured}
+            horizontal
+            inverted
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(p) => `featured-${p.id}`}
+            contentContainerStyle={{ gap: spacing.md }}
+            style={{ flexGrow: 0 }}
+            renderItem={({ item }) => (
+              <View style={{ width: featuredW }}>
+                <ProCard pro={item} featured />
+              </View>
+            )}
+          />
         </View>
       ) : null}
 

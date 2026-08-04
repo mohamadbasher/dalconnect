@@ -8,18 +8,29 @@ import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { ROW } from "../../lib/rtl";
 import { BookingCard } from "../../components/BookingCard";
-import { Button, EmptyState, Loading } from "../../components/ui";
+import { Button, EmptyState, Skeleton, SkeletonList } from "../../components/ui";
 import type { Booking, BookingStatus } from "../../lib/types";
 
 type Segment = "active" | "done" | "cancelled";
 
-const SEGMENT_STATUSES: Record<Segment, BookingStatus[]> = {
-  active: ["open", "pending", "accepted", "on_the_way", "in_progress"],
-  done: ["completed", "rated"],
-  cancelled: ["cancelled", "rejected"],
-};
-
 const SEGMENTS: Segment[] = ["active", "done", "cancelled"];
+
+/**
+ * Single source of truth for the segmentation: every booking lands in exactly
+ * one bucket, so the chip counts can never disagree with the list below them.
+ */
+function segmentOf(status: BookingStatus): Segment {
+  switch (status) {
+    case "completed":
+    case "rated":
+      return "done";
+    case "cancelled":
+    case "rejected":
+      return "cancelled";
+    default:
+      return "active";
+  }
+}
 
 /** segment chip with a count badge (Chip from ui.tsx has no badge slot) */
 function SegChip({
@@ -117,28 +128,34 @@ export default function BookingsTab() {
     setRefreshing(false);
   };
 
-  const filtered = useMemo(
-    () => (bookings ?? []).filter((b) => SEGMENT_STATUSES[segment].includes(b.status)),
-    [bookings, segment]
-  );
-
-  const counts = useMemo(() => {
-    const c: Record<Segment, number> = { active: 0, done: 0, cancelled: 0 };
-    for (const b of bookings ?? []) {
-      for (const seg of SEGMENTS) {
-        if (SEGMENT_STATUSES[seg].includes(b.status)) c[seg] += 1;
-      }
-    }
-    return c;
+  // one pass → the exact lists each chip counts and the FlatList renders
+  const grouped = useMemo(() => {
+    const g: Record<Segment, Booking[]> = { active: [], done: [], cancelled: [] };
+    for (const b of bookings ?? []) g[segmentOf(b.status)].push(b);
+    return g;
   }, [bookings]);
 
-  if (bookings === null) return <Loading />;
+  const filtered = grouped[segment];
 
   const segLabel: Record<Segment, string> = {
     active: t("segActive"),
     done: t("segDone"),
     cancelled: t("segCancelled"),
   };
+
+  if (bookings === null) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <View style={{ ...ROW, gap: 8, paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
+          {SEGMENTS.map((seg) => (
+            <Skeleton key={seg} width={92} height={34} radius={radius.full} />
+          ))}
+        </View>
+        <SkeletonList count={4} />
+      </View>
+    );
+  }
+
   const emptyTitle =
     segment === "active" ? t("emptyBookingsTitle") : segment === "done" ? t("emptyDoneTitle") : t("emptyCancelledTitle");
 
@@ -149,7 +166,7 @@ export default function BookingsTab() {
           <SegChip
             key={seg}
             label={segLabel[seg]}
-            count={counts[seg]}
+            count={grouped[seg].length}
             active={segment === seg}
             onPress={() => setSegment(seg)}
           />

@@ -46,6 +46,8 @@ export interface Profile {
   city_id: number | null;
   lang: Lang;
   is_banned: boolean;
+  /** granular staff powers; admins bypass this list entirely */
+  permissions: string[];
   created_at: string;
 }
 
@@ -63,6 +65,10 @@ export interface Professional {
   rating_avg: number;
   rating_count: number;
   jobs_completed: number;
+  /** paid placement — active only while featured_until is null or in the future */
+  featured: boolean;
+  featured_until: string | null;
+  featured_sort: number;
   created_at: string;
 }
 
@@ -162,11 +168,34 @@ export interface Notification {
   id: string;
   user_id: string;
   type: "booking_update" | "offer" | "message" | "system" | "promo";
+  /** legacy single-language columns — kept for older rows */
   title: string;
   body: string;
+  /** per-language copy; prefer these and fall back to title/body */
+  title_ar: string | null;
+  title_he: string | null;
+  body_ar: string | null;
+  body_he: string | null;
   data: { bookingId?: string; conversationId?: string; offerId?: string };
   is_read: boolean;
   created_at: string;
+}
+
+/** Pick the viewer's language for a notification, falling back to legacy rows. */
+export function notificationText(n: Notification, lang: Lang): { title: string; body: string } {
+  return {
+    title: (lang === "he" ? n.title_he : n.title_ar) || n.title || "",
+    body: (lang === "he" ? n.body_he : n.body_ar) || n.body || "",
+  };
+}
+
+export interface LegalPage {
+  key: "terms" | "privacy" | "about" | "contact";
+  title_ar: string;
+  title_he: string;
+  body_ar: string;
+  body_he: string;
+  updated_at: string;
 }
 
 export interface GalleryItem {

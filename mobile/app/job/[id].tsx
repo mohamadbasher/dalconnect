@@ -23,6 +23,7 @@ import { getOrCreateConversation } from "../../lib/chat";
 import { formatDateTime, STATUS_KEY, STATUS_TONE } from "../../lib/format";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
 import { Avatar, Badge, Button, Card, EmptyState, Loading, SectionHeader } from "../../components/ui";
+import { useToast } from "../../components/Toast";
 import type { Booking, BookingStatus } from "../../lib/types";
 
 const STEPS: BookingStatus[] = ["accepted", "on_the_way", "in_progress", "completed"];
@@ -38,6 +39,7 @@ export default function JobScreen() {
   const { colors, shadows } = useTheme();
   const { t, lang, loc } = useI18n();
   const { session } = useAuth();
+  const toast = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const uid = session?.user?.id ?? null;
@@ -96,17 +98,19 @@ export default function JobScreen() {
       .select("id");
     if (error) {
       setBusy(false);
-      Alert.alert(t("error"));
+      toast.error(t("error"));
       return;
     }
     if (!data?.length) {
-      // status changed elsewhere (e.g. customer cancelled) — resync
+      // status changed elsewhere (e.g. customer cancelled) — resync and say so
       await load();
       setBusy(false);
+      toast.info(t("statusChangedElsewhere"));
       return;
     }
     setBooking((prev) => (prev ? { ...prev, status: next, ...(extra as Partial<Booking>) } : prev));
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    toast.success(t(next === "completed" ? "jobCompletedToast" : "statusUpdated"));
     // refetch so trigger-computed fields (commission, completed_at) come through
     await load();
     setBusy(false);
@@ -118,7 +122,7 @@ export default function JobScreen() {
       const cid = await getOrCreateConversation(booking.customer_id, uid);
       router.push(`/chat/${cid}`);
     } catch {
-      Alert.alert(t("error"));
+      toast.error(t("error"));
     }
   };
 
@@ -185,6 +189,7 @@ export default function JobScreen() {
 
   const onAdvance = () => {
     if (!advance) return;
+    // finishing is irreversible (ledger + commission) — keep a real confirm dialog
     if (advance.next === "completed") {
       Alert.alert(t("finishConfirmTitle"), t("finishConfirmMsg"), [
         { text: t("cancel"), style: "cancel" },
@@ -234,7 +239,7 @@ export default function JobScreen() {
             </View>
             {booking.cancel_reason ? (
               <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 13 }]}>
-                {t("cancelReasonLabel")}: {booking.cancel_reason}
+                {t("proCancelReasonLabel")}: {booking.cancel_reason}
               </Text>
             ) : null}
           </View>
@@ -424,7 +429,7 @@ export default function JobScreen() {
 
         {/* details */}
         <Card style={{ gap: spacing.md }}>
-          <SectionHeader title={t("detailsTitle")} />
+          <SectionHeader title={t("proDetailsTitle")} />
           {booking.title ? (
             <Text style={[RTL_TEXT, { color: colors.text, fontSize: 14.5, fontWeight: "700" }]}>{booking.title}</Text>
           ) : null}
@@ -460,7 +465,7 @@ export default function JobScreen() {
           <View style={{ ...ROW, gap: 6 }}>
             <Ionicons name="time-outline" size={16} color={colors.brand} />
             <Text style={[RTL_TEXT, { color: colors.text, fontSize: 13.5 }]}>
-              {t("scheduleLabel")}: {booking.scheduled_at ? formatDateTime(booking.scheduled_at, lang) : t("asap")}
+              {t("proScheduleLabel")}: {booking.scheduled_at ? formatDateTime(booking.scheduled_at, lang) : t("proAsap")}
             </Text>
           </View>
 
@@ -479,7 +484,7 @@ export default function JobScreen() {
             </View>
           ) : null}
           {booking.price != null && !isDone ? (
-            <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12 }]}>{t("cashNote")}</Text>
+            <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12 }]}>{t("proCashNote")}</Text>
           ) : null}
 
           {booking.lat != null && booking.lng != null && !isDone ? (

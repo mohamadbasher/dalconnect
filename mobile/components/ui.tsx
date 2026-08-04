@@ -2,6 +2,7 @@
 import React from "react";
 import {
   ActivityIndicator,
+  Animated,
   Pressable,
   StyleSheet,
   Text,
@@ -14,6 +15,12 @@ import { Image } from "expo-image";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { useTheme, radius, spacing } from "../lib/theme";
 import { ROW, RTL_TEXT } from "../lib/rtl";
+
+// ---------- Press states (Dal's calibrated values) ----------
+/** Tap feedback for card-sized surfaces: a real, visible push-in. */
+export const pressCard: ViewStyle = { transform: [{ scale: 0.97 }], opacity: 0.9 };
+/** Tap feedback for CTAs: barely-there scale so the glow doesn't jump. */
+export const pressCta: ViewStyle = { opacity: 0.88, transform: [{ scale: 0.99 }] };
 
 // ---------- Button ----------
 type BtnVariant = "primary" | "outline" | "ghost" | "danger" | "success";
@@ -57,13 +64,16 @@ export function Button({
           paddingHorizontal: small ? 14 : 20,
           borderWidth: variant === "outline" ? 1.5 : 0,
           borderColor: colors.brand,
-          opacity: isDisabled ? 0.5 : pressed ? 0.85 : 1,
-          transform: [{ scale: pressed ? 0.98 : 1 }],
+          opacity: isDisabled ? 0.5 : 1,
           ...ROW,
           justifyContent: "center",
           gap: 8,
         },
         variant === "primary" && !isDisabled ? shadows.cta : null,
+        // A disabled CTA must lose the glow too — dimming only the fill while a
+        // brand-coloured halo still burns underneath looks like a render bug.
+        isDisabled ? { shadowOpacity: 0, elevation: 0 } : null,
+        pressed && !isDisabled ? pressCta : null,
         style,
       ]}
     >
@@ -174,19 +184,221 @@ export function Badge({
   );
 }
 
-// ---------- Card ----------
-export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
+// ---------- StatusPill ----------
+export type Tone = "success" | "danger" | "warn" | "info" | "neutral" | "brand";
+
+/** tone -> [tint background, foreground/dot colour] */
+function useToneMap(): Record<Tone, { bg: string; fg: string }> {
+  const { colors } = useTheme();
+  return {
+    success: { bg: colors.successTint, fg: colors.success },
+    danger: { bg: colors.dangerTint, fg: colors.danger },
+    warn: { bg: colors.warnTint, fg: colors.warn },
+    info: { bg: colors.infoTint, fg: colors.info },
+    neutral: { bg: colors.chip, fg: colors.muted },
+    brand: { bg: colors.brandTint, fg: colors.brand },
+  };
+}
+
+/**
+ * Live-state pill: tint background + a coloured dot + bold coloured label.
+ * `glow` lights the dot up (a literal halo in its own colour) for states that
+ * are actively "on" — open/available/online.
+ */
+export function StatusPill({
+  label,
+  tone = "neutral",
+  glow,
+}: {
+  label: string;
+  tone?: Tone;
+  glow?: boolean;
+}) {
+  const map = useToneMap()[tone];
+  return (
+    <View
+      style={{
+        ...ROW,
+        gap: 7,
+        alignSelf: "flex-start",
+        backgroundColor: map.bg,
+        borderRadius: radius.full,
+        paddingHorizontal: 12,
+        paddingVertical: 5,
+      }}
+    >
+      <View
+        style={[
+          { width: 7, height: 7, borderRadius: radius.full, backgroundColor: map.fg },
+          glow
+            ? {
+                shadowColor: map.fg,
+                shadowOpacity: 0.9,
+                shadowRadius: 4,
+                shadowOffset: { width: 0, height: 0 },
+              }
+            : null,
+        ]}
+      />
+      <Text style={{ color: map.fg, fontSize: 12.5, fontWeight: "700" }}>{label}</Text>
+    </View>
+  );
+}
+
+// ---------- InlineNote ----------
+/**
+ * Tint strip that explains a state in place — use it instead of an Alert for
+ * anything the user should read rather than dismiss ("your account is pending
+ * review", "this booking was cancelled"). Pass `onPress` to make it a lead-in.
+ */
+export function InlineNote({
+  tone = "info",
+  icon,
+  text,
+  onPress,
+}: {
+  tone?: Tone;
+  icon?: keyof typeof MaterialCommunityIcons.glyphMap;
+  text: string;
+  onPress?: () => void;
+}) {
+  const map = useToneMap()[tone];
+  const body = (
+    <>
+      {icon ? <MaterialCommunityIcons name={icon} size={18} color={map.fg} /> : null}
+      <Text style={[RTL_TEXT, { flex: 1, color: map.fg, fontSize: 13, fontWeight: "600", lineHeight: 19 }]}>
+        {text}
+      </Text>
+      {onPress ? <Ionicons name="chevron-back" size={16} color={map.fg} /> : null}
+    </>
+  );
+  const base: ViewStyle = {
+    ...ROW,
+    gap: 8,
+    alignItems: "flex-start",
+    backgroundColor: map.bg,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  };
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} style={({ pressed }) => [base, pressed ? pressCard : null]}>
+        {body}
+      </Pressable>
+    );
+  }
+  return <View style={base}>{body}</View>;
+}
+
+// ---------- Stat ----------
+/**
+ * Stat tile. The value shrinks to fit rather than wrapping — a four-digit
+ * shekel figure wrapping onto two lines breaks the row of tiles beside it.
+ */
+export function Stat({
+  icon,
+  value,
+  label,
+  tone = "brand",
+  style,
+}: {
+  icon?: keyof typeof MaterialCommunityIcons.glyphMap;
+  value: string;
+  label: string;
+  tone?: Tone;
+  style?: ViewStyle;
+}) {
   const { colors, shadows } = useTheme();
+  const map = useToneMap()[tone];
   return (
     <View
       style={[
-        { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, ...shadows.card },
+        {
+          flex: 1,
+          backgroundColor: colors.card,
+          borderRadius: radius.lg,
+          paddingVertical: spacing.md,
+          paddingHorizontal: spacing.sm,
+          alignItems: "center",
+          gap: 6,
+          ...shadows.card,
+        },
         style,
       ]}
     >
-      {children}
+      {icon ? (
+        <View
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: radius.full,
+            backgroundColor: map.bg,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <MaterialCommunityIcons name={icon} size={16} color={map.fg} />
+        </View>
+      ) : null}
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.75}
+        style={{ color: colors.text, fontSize: 18, fontWeight: "800" }}
+      >
+        {value}
+      </Text>
+      <Text numberOfLines={1} style={{ color: colors.muted, fontSize: 11.5, fontWeight: "600" }}>
+        {label}
+      </Text>
     </View>
   );
+}
+
+// ---------- SheetHandle ----------
+/** The grab handle every bottom sheet wears at its top edge. */
+export function SheetHandle() {
+  const { colors } = useTheme();
+  return (
+    <View
+      style={{
+        width: 40,
+        height: 4,
+        borderRadius: radius.full,
+        backgroundColor: colors.border,
+        alignSelf: "center",
+        marginBottom: spacing.md,
+      }}
+    />
+  );
+}
+
+// ---------- Card ----------
+export function Card({
+  children,
+  style,
+  onPress,
+}: {
+  children: React.ReactNode;
+  style?: ViewStyle;
+  /** Pass to make the whole card tappable (adds Dal's push-in press state). */
+  onPress?: () => void;
+}) {
+  const { colors, shadows } = useTheme();
+  const base: ViewStyle = {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    ...shadows.card,
+  };
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} style={({ pressed }) => [base, pressed ? pressCard : null, style]}>
+        {children}
+      </Pressable>
+    );
+  }
+  return <View style={[base, style]}>{children}</View>;
 }
 
 // ---------- SectionHeader — Dal's visual signature (brand accent bar) ----------
@@ -195,7 +407,7 @@ export function SectionHeader({ title, action, onAction }: { title: string; acti
   return (
     <View style={{ ...ROW, justifyContent: "space-between", marginBottom: spacing.md }}>
       <View style={{ ...ROW, gap: 8 }}>
-        <View style={{ width: 4, height: 18, borderRadius: 2, backgroundColor: colors.brand }} />
+        <View style={{ width: 4, height: 18, borderRadius: radius.full, backgroundColor: colors.brand }} />
         <Text style={{ color: colors.text, fontSize: 17, fontWeight: "800" }}>{title}</Text>
       </View>
       {action ? (
@@ -346,6 +558,86 @@ export function Loading() {
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg }}>
       <ActivityIndicator size="large" color={colors.brand} />
+    </View>
+  );
+}
+
+// ---------- Skeletons ----------
+/** Shimmering placeholder block — use while first-loading lists/cards. */
+export function Skeleton({
+  width,
+  height,
+  radius: r = radius.sm,
+  style,
+}: {
+  width?: number | `${number}%`;
+  height: number;
+  radius?: number;
+  style?: ViewStyle;
+}) {
+  const { colors } = useTheme();
+  const anim = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1, duration: 750, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0, duration: 750, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [anim]);
+
+  return (
+    <Animated.View
+      style={[
+        {
+          width: width ?? "100%",
+          height,
+          borderRadius: r,
+          backgroundColor: colors.chip,
+          opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }),
+        },
+        style,
+      ]}
+    />
+  );
+}
+
+/** Card-shaped skeleton matching ProCard / BookingCard proportions. */
+export function SkeletonCard() {
+  const { colors, shadows } = useTheme();
+  return (
+    <View
+      style={{
+        backgroundColor: colors.card,
+        borderRadius: radius.lg,
+        padding: spacing.lg,
+        gap: 10,
+        ...shadows.card,
+      }}
+    >
+      <View style={{ ...ROW, gap: 12 }}>
+        <Skeleton width={52} height={52} radius={26} />
+        <View style={{ flex: 1, gap: 8 }}>
+          <Skeleton width="60%" height={14} />
+          <Skeleton width="85%" height={11} />
+          <Skeleton width="40%" height={11} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/** A list of SkeletonCards — drop-in replacement for <Loading/> on lists. */
+export function SkeletonList({ count = 4 }: { count?: number }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.bg, padding: spacing.lg, gap: spacing.md }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <SkeletonCard key={i} />
+      ))}
     </View>
   );
 }

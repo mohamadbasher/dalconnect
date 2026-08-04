@@ -30,6 +30,8 @@ export const S = {
   navBanners: "الإعلانات",
   navSettings: "الإعدادات",
   navNotifications: "الإشعارات",
+  navLegal: "الصفحات القانونية",
+  navAudit: "سجل النشاط",
 
   // common
   search: "بحث…",
@@ -177,7 +179,13 @@ export const S = {
   colDate: "التاريخ",
   reviewsEmpty: "لا توجد تقييمات",
   reviewsNote:
-    "ملاحظة: حذف التقييم لا يعيد احتساب معدّل المهني فوراً — يتم التحديث تلقائياً عند التقييم التالي.",
+    "التقييمات المخفية لا تظهر في التطبيق ولا تُحتسب ضمن معدّل المهني. تعيد قاعدة البيانات احتساب المعدّل وعدد التقييمات تلقائياً عند الإخفاء أو النشر أو الحذف.",
+  reviewPublished: "منشور",
+  reviewHidden: "مخفي",
+  reviewHide: "إخفاء",
+  reviewPublish: "نشر",
+  tabPublished: "منشورة",
+  tabHidden: "مخفية",
 
   // reports
   reportsTitle: "البلاغات",
@@ -223,6 +231,78 @@ export const S = {
   notifSent: "تم إرسال الإشعار إلى {n} مستخدم",
   notifCapWarning: "تنبيه: عدد المستلمين تجاوز الحد ({cap}) — تم الإرسال لأول {cap} مستخدم فقط.",
   notifPushNote: "يتم دفع الإشعارات للأجهزة تلقائياً عبر Edge Function مربوطة بجدول الإشعارات.",
+
+  // legal pages (CMS)
+  legalTitle: "الصفحات القانونية",
+  legalSubtitle: "تحرير نصوص التطبيق دون إصدار نسخة جديدة",
+  legalKeyTerms: "شروط الاستخدام",
+  legalKeyPrivacy: "سياسة الخصوصية",
+  legalKeyAbout: "من نحن",
+  legalKeyContact: "اتصل بنا",
+  legalBuiltIn: "ما زال يستخدم النص المدمج في التطبيق",
+  legalCustom: "نص مخصّص من اللوحة",
+  legalArCustom: "العربية: نص مخصّص",
+  legalArBuiltIn: "العربية: النص المدمج",
+  legalHeCustom: "العبرية: نص مخصّص",
+  legalHeBuiltIn: "العبرية: النص المدمج",
+  legalOverrideWarning:
+    "تنبيه: عند الحفظ بنص غير فارغ يستبدل هذا النص النصّ المدمج في التطبيق لتلك اللغة. اترك حقل النص فارغاً للإبقاء على النص المدمج.",
+  legalTitleAr: "العنوان (عربي)",
+  legalTitleHe: "العنوان (عبري)",
+  legalBodyAr: "النص (عربي)",
+  legalBodyHe: "النص (عبري)",
+  legalBodyHint: "نص عادي — تظهر الأسطر الجديدة كما هي في التطبيق.",
+  legalUpdatedAt: "آخر تحديث",
+  legalNeverSaved: "لم يُحفظ من اللوحة بعد",
+
+  // audit log
+  auditTitle: "سجل النشاط",
+  auditEmpty: "لا توجد عمليات مسجّلة",
+  auditNote:
+    "اسم المنفّذ ودوره محفوظان لحظة تنفيذ العملية، لذلك يبقى السجل مقروءاً حتى بعد حذف الحساب.",
+  auditFilterAction: "نوع العملية",
+  auditFilterRole: "دور المنفّذ",
+  auditAll: "الكل",
+  colAction: "العملية",
+  colActor: "المنفّذ",
+  colSummary: "الوصف",
+  colTarget: "الهدف",
+  colTime: "الوقت",
+  colMetadata: "تفاصيل إضافية",
+  auditPrev: "السابق",
+  auditNext: "التالي",
+  auditPageOf: "صفحة {n} من {total}",
+  auditActionProfessional: "المهنيون",
+  auditActionReview: "التقييمات",
+  auditActionLegal: "الصفحات القانونية",
+  auditActionBooking: "الحجوزات",
+  auditActionUser: "المستخدمون",
+  auditActionCategory: "الفئات",
+  auditActionCity: "المدن",
+  auditActionBanner: "الإعلانات",
+  auditActionReport: "البلاغات",
+  auditActionSetting: "الإعدادات",
+  auditActionNotification: "الإشعارات",
+
+  // promoted professionals
+  featuredTitle: "المهنيون المميّزون",
+  featuredEmpty: "لا يوجد مهنيون مميّزون",
+  featuredNote:
+    "الترتيب هنا يحدّد ترتيب ظهورهم في أعلى نتائج التطبيق. ينتهي الترويج تلقائياً في تاريخ الانتهاء.",
+  featuredPromote: "ترويج",
+  featuredStop: "إيقاف",
+  featuredExtend: "تحديث المدة",
+  featuredDays: "المدة (أيام)",
+  featuredDaysHint: "اتركه فارغاً لترويج بلا تاريخ انتهاء",
+  featuredRemaining: "متبقٍ {n} يوم",
+  featuredNoExpiry: "بلا تاريخ انتهاء",
+  featuredExpiredBadge: "منتهي",
+  featuredExpiredHint: "انتهت مدة الترويج — لم يعد ظاهراً في التطبيق. مدّد المدة أو أوقف الترويج.",
+  featuredActiveBadge: "مميّز",
+  featuredUntil: "حتى",
+  featuredMoveUp: "تقديم",
+  featuredMoveDown: "تأخير",
+  colFeatured: "الترويج",
 } as const;
 
 export type StringKey = keyof typeof S;

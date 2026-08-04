@@ -17,6 +17,11 @@ export const home: Dict = {
   homeNoProsYet: { ar: "لا يوجد مهنيون بعد", he: "אין עדיין בעלי מקצוע" },
   homeActiveRequest: { ar: "طلبك الحالي", he: "הבקשה הפעילה שלכם" },
   homeOffersCount: { ar: "عروض الأسعار: {count}", he: "הצעות מחיר: {count}" },
+  homeFeatured: { ar: "مهنيون مميّزون", he: "בעלי מקצוע מובחרים" },
+  homeFeaturedSubtitle: {
+    ar: "مهنيون اختارونا لعرض خدماتهم هنا",
+    he: "בעלי מקצוע שבחרו להציג כאן את השירותים שלהם",
+  },
 
   // ----- favorites -----
   favEmptyTitle: { ar: "لا مفضلات بعد", he: "אין עדיין מועדפים" },
@@ -37,6 +42,13 @@ export const home: Dict = {
     he: "נסו מילים אחרות או שנו את הסינון",
   },
   searchResultsCount: { ar: "{count} مهني", he: "{count} בעלי מקצוע" },
+  searchNoResultsTitle: { ar: "ما لقينا نتائج", he: "לא מצאנו תוצאות" },
+  searchClearFilters: { ar: "امسح البحث والفلاتر", he: "ניקוי החיפוש והסינון" },
+  searchErrorTitle: { ar: "تعذّر تحميل النتائج", he: "לא הצלחנו לטעון תוצאות" },
+  searchErrorSubtitle: {
+    ar: "تأكد من اتصالك بالإنترنت وحاول مرة ثانية",
+    he: "בדקו את החיבור לאינטרנט ונסו שוב",
+  },
   searchBrowseSubtitle: {
     ar: "تصفّح الفئات أو ابحث عن خدمة أو مهني",
     he: "עיינו בקטגוריות או חפשו שירות או בעל מקצוע",
@@ -70,6 +82,19 @@ export const home: Dict = {
     he: "בעל המקצוע לא זמין כרגע — עדיין אפשר לשלוח בקשה והוא יחזור אליכם כשיתפנה",
   },
   proFavorite: { ar: "مفضلة", he: "מועדפים" },
+  proOpenNow: { ar: "مفتوح الآن", he: "פתוח עכשיו" },
+  proClosedNow: { ar: "مغلق الآن", he: "סגור עכשיו" },
+  proWhatsapp: { ar: "واتساب", he: "וואטסאפ" },
+  proWhatsappFailed: {
+    ar: "ما قدرنا نفتح واتساب على جهازك",
+    he: "לא הצלחנו לפתוח את וואטסאפ במכשיר שלכם",
+  },
+  proCallFailed: { ar: "ما قدرنا نبدأ المكالمة", he: "לא הצלחנו להתחיל את השיחה" },
+  proShareTradeFallback: { ar: "مهني", he: "בעל מקצוע" },
+  proShareMessage: {
+    ar: "{name} — {trade}\nلقيته على {app}، تطبيق يلاقي لك أفضل المهنيين بمنطقتك 👌",
+    he: "{name} — {trade}\nמצאתי אותו ב{app}, האפליקציה שמוצאת לכם את בעלי המקצוע הטובים באזור 👌",
+  },
   proDay0: { ar: "الأحد", he: "ראשון" },
   proDay1: { ar: "الاثنين", he: "שני" },
   proDay2: { ar: "الثلاثاء", he: "שלישי" },

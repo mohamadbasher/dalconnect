@@ -55,8 +55,8 @@ export const pro: Dict = {
   offerWithdrawn: { ar: "عرض مسحوب", he: "הצעה בוטלה" },
 
   // ---------- jobs tab ----------
-  segActive: { ar: "الحالية", he: "פעילות" },
-  segDone: { ar: "المنجزة", he: "הושלמו" },
+  proSegActive: { ar: "الحالية", he: "פעילות" },
+  proSegDone: { ar: "المنجزة", he: "הושלמו" },
   segOther: { ar: "أخرى", he: "אחרות" },
   noJobs: { ar: "لا توجد أعمال هنا", he: "אין כאן עבודות" },
   noJobsHint: {
@@ -67,12 +67,12 @@ export const pro: Dict = {
   // ---------- job screen ----------
   jobTitle: { ar: "تفاصيل العمل", he: "פרטי העבודה" },
   customerTitle: { ar: "العميل", he: "הלקוח" },
-  detailsTitle: { ar: "التفاصيل", he: "פרטים" },
-  addressLabel: { ar: "العنوان", he: "כתובת" },
-  scheduleLabel: { ar: "الموعد", he: "מועד" },
-  asap: { ar: "في أقرب وقت ممكن", he: "בהקדם האפשרי" },
+  proDetailsTitle: { ar: "التفاصيل", he: "פרטים" },
+  proAddressLabel: { ar: "العنوان", he: "כתובת" },
+  proScheduleLabel: { ar: "الموعد", he: "מועד" },
+  proAsap: { ar: "في أقرب وقت ممكن", he: "בהקדם האפשרי" },
   agreedPrice: { ar: "السعر المتفق عليه", he: "המחיר שסוכם" },
-  cashNote: { ar: "الدفع نقداً عند إتمام العمل", he: "התשלום במזומן בסיום העבודה" },
+  proCashNote: { ar: "الدفع نقداً عند إتمام العمل", he: "התשלום במזומן בסיום העבודה" },
   navigate: { ar: "التوجه عبر الخرائط", he: "ניווט" },
   progressTitle: { ar: "مراحل العمل", he: "שלבי העבודה" },
   imOnMyWay: { ar: "أنا في الطريق", he: "אני בדרך" },
@@ -88,7 +88,13 @@ export const pro: Dict = {
   netAmount: { ar: "الصافي لك", he: "נטו עבורך" },
   jobNotFound: { ar: "العمل غير موجود", he: "העבודה לא נמצאה" },
   cancelledByCustomerTitle: { ar: "ألغى العميل هذا الحجز", he: "הלקוח ביטל את ההזמנה" },
-  cancelReasonLabel: { ar: "سبب الإلغاء", he: "סיבת הביטול" },
+  proCancelReasonLabel: { ar: "سبب الإلغاء", he: "סיבת הביטול" },
+  statusUpdated: { ar: "تم تحديث حالة العمل", he: "סטטוס העבודה עודכן" },
+  jobCompletedToast: { ar: "تم إنهاء العمل — بالتوفيق!", he: "העבודה הושלמה — כל הכבוד!" },
+  statusChangedElsewhere: {
+    ar: "تغيّرت حالة الحجز — حدّثنا الصفحة",
+    he: "סטטוס ההזמנה השתנה — רעננו את הדף",
+  },
 
   // ---------- earnings ----------
   totalNet: { ar: "إجمالي الأرباح", he: 'סה"כ רווחים' },
@@ -124,7 +130,7 @@ export const pro: Dict = {
   },
   cityLabel: { ar: "مدينة العمل", he: "עיר הפעילות" },
   selectCity: { ar: "اختر المدينة", he: "בחרו עיר" },
-  searchCity: { ar: "ابحث عن مدينة…", he: "חיפוש עיר…" },
+  proSearchCity: { ar: "ابحث عن مدينة…", he: "חיפוש עיר…" },
   pickCategoriesHint: { ar: "اختر من 1 إلى 5 مجالات", he: "בחרו בין 1 ל‑5 תחומים" },
   maxCategoriesMsg: { ar: "يمكن اختيار 5 مجالات كحد أقصى", he: "אפשר לבחור עד 5 תחומים" },
   minCategoriesMsg: { ar: "اختر مجالاً واحداً على الأقل", he: "בחרו לפחות תחום אחד" },
@@ -175,4 +181,42 @@ export const pro: Dict = {
   deletePhotoMsg: { ar: "سيتم حذف الصورة من معرضك نهائياً", he: "התמונה תימחק מהגלריה לצמיתות" },
   saved: { ar: "تم الحفظ", he: "נשמר" },
   uploadFailed: { ar: "فشل رفع الصورة، حاول مجدداً", he: "העלאת התמונה נכשלה, נסו שוב" },
+
+  // ---------- hours editor ----------
+  openLabel: { ar: "مفتوح", he: "פתוח" },
+  hoursHint: {
+    ar: "اضغط على الساعة لاختيار وقت آخر — العملاء يرون هذه الأوقات في ملفك",
+    he: "הקישו על השעה כדי לבחור זמן אחר — הלקוחות רואים את השעות האלה בפרופיל",
+  },
+  setHoursHint: { ar: "لم تحدد ساعات عمل بعد", he: "עדיין לא הוגדרו שעות פעילות" },
+
+  // ---------- become-pro completion meter ----------
+  completionTitle: { ar: "اكتمال ملفك المهني", he: "השלמת הפרופיל המקצועי" },
+  completionReady: { ar: "جاهز للنشر ✨", he: "מוכן לפרסום ✨" },
+  completionRemaining: { ar: "أكمل {count} خطوات", he: "השלימו עוד {count} שלבים" },
+  checkBusinessName: { ar: "اسم النشاط", he: "שם העסק" },
+  checkBio: { ar: "نبذة", he: "תיאור" },
+  checkCity: { ar: "المدينة", he: "עיר" },
+  checkCategory: { ar: "مجال عمل", he: "תחום" },
+  checkIdDoc: { ar: "الهوية", he: "תעודת זהות" },
+  proCreated: { ar: "أهلاً بك بيننا! ملفك المهني جاهز", he: "ברוכים הבאים! הפרופיל המקצועי שלכם מוכן" },
+
+  // ---------- profile preview ----------
+  previewCta: { ar: "معاينة ملفك كما يراه الزبون", he: "תצוגה מקדימה כפי שהלקוח רואה" },
+  previewTitle: { ar: "معاينة الملف", he: "תצוגה מקדימה" },
+  previewSubtitle: { ar: "هكذا يظهر ملفك للعملاء", he: "כך הפרופיל שלכם נראה ללקוחות" },
+  previewMissing: { ar: "ينقصك: {items}", he: "חסר לכם: {items}" },
+  previewBackToEdit: { ar: "العودة للتعديل", he: "חזרה לעריכה" },
+  missingPhoto: { ar: "صورة شخصية", he: "תמונת פרופיל" },
+  missingBio: { ar: "نبذة عنك", he: "תיאור עליכם" },
+  missingGallery: { ar: "صور أعمالك", he: "תמונות עבודות" },
+  missingVerification: { ar: "توثيق الهوية", he: "אימות זהות" },
+  previewAllGood: { ar: "ملفك مكتمل — أحسنت!", he: "הפרופיל מלא — כל הכבוד!" },
+  noBioYet: { ar: "لم تكتب نبذة بعد", he: "עוד לא נכתב תיאור" },
+  noGalleryYet: { ar: "لا صور أعمال بعد", he: "עדיין אין תמונות עבודות" },
+  newPro: { ar: "مهني جديد", he: "בעל מקצוע חדש" },
+
+  // ---------- earnings graph ----------
+  last7DaysTitle: { ar: "أرباح آخر 7 أيام", he: "רווחי 7 הימים האחרונים" },
+  last7DaysTotal: { ar: "المجموع: {amount}", he: 'סה"כ: {amount}' },
 };

@@ -26,10 +26,21 @@ Deno.serve(async (req) => {
     if (error) throw error;
     if (!tokens?.length) return new Response("no tokens", { status: 200 });
 
+    // Send in the recipient's own language (rows carry both; older rows only
+    // have the legacy title/body).
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("lang")
+      .eq("id", record.user_id)
+      .maybeSingle();
+    const he = profile?.lang === "he";
+    const title = (he ? record.title_he : record.title_ar) || record.title || "";
+    const body = (he ? record.body_he : record.body_ar) || record.body || "";
+
     const messages = tokens.map((t) => ({
       to: t.token,
-      title: record.title,
-      body: record.body || undefined,
+      title,
+      body: body || undefined,
       data: record.data ?? {},
       sound: "default",
       channelId: "default",

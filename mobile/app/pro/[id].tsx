@@ -4,10 +4,12 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Modal,
   Pressable,
   RefreshControl,
   ScrollView,
+  Share,
   Text,
   useWindowDimensions,
   View,
@@ -22,12 +24,26 @@ import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { getOrCreateConversation } from "../../lib/chat";
 import { formatTime } from "../../lib/format";
+import { hasWorkingHours, isOpenNow, todayHoursLabel } from "../../lib/hours";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
 import { Avatar, Badge, Button, Card, EmptyState, Loading, SectionHeader, StarRating } from "../../components/ui";
+import { useToast } from "../../components/Toast";
 import type { GalleryItem, ProCard as ProCardType, Review } from "../../lib/types";
 
 const PRO_SELECT =
   "*, profile:profiles!professionals_id_fkey(*), professional_categories(category:categories(*)), city:cities(*)";
+
+/**
+ * Israeli numbers for WhatsApp: digits only, international form without "+".
+ * "052-123-4567" → "972521234567", "+972 52 …" / "00972…" pass through.
+ */
+function waDigits(phone: string): string {
+  let d = phone.replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.startsWith("972")) return d;
+  if (d.startsWith("0")) return `972${d.slice(1)}`;
+  return `972${d}`;
+}
 
 function mapPro(row: any): ProCardType {
   return {
@@ -120,6 +136,7 @@ export default function ProProfileScreen() {
   const { colors, shadows } = useTheme();
   const { t, lang, loc } = useI18n();
   const { session, loading: authLoading } = useAuth();
+  const toast = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -216,15 +233,67 @@ export default function ProProfileScreen() {
     }
   };
 
+  const name = pro ? pro.business_name || pro.profile?.full_name || "" : "";
+  const phone = (pro?.profile?.phone ?? "").trim();
+
+  const callPro = useCallback(async () => {
+    if (!phone) return;
+    try {
+      await Linking.openURL(`tel:${phone.replace(/\s/g, "")}`);
+    } catch {
+      toast.error(t("proCallFailed"));
+    }
+  }, [phone, toast, t]);
+
+  // Prefer the installed app; fall back to the wa.me web hand-off.
+  const openWhatsApp = useCallback(async () => {
+    if (!phone) return;
+    const digits = waDigits(phone);
+    const appUrl = `whatsapp://send?phone=${digits}`;
+    try {
+      if (await Linking.canOpenURL(appUrl)) {
+        await Linking.openURL(appUrl);
+        return;
+      }
+    } catch {
+      // canOpenURL can throw when the scheme isn't declared — fall through
+    }
+    try {
+      await Linking.openURL(`https://wa.me/${digits}`);
+    } catch {
+      toast.error(t("proWhatsappFailed"));
+    }
+  }, [phone, toast, t]);
+
+  const sharePro = useCallback(async () => {
+    if (!pro) return;
+    const trade = (pro.categories ?? []).map((c) => loc(c, "name")).join(" · ");
+    try {
+      // No public web profile exists yet — share plain text, never a fake URL.
+      await Share.share({
+        message: t("proShareMessage", {
+          name,
+          trade: trade || t("proShareTradeFallback"),
+          app: t("appName"),
+        }),
+      });
+    } catch {
+      // user dismissed the sheet — nothing to report
+    }
+  }, [pro, name, loc, t]);
+
   if (authLoading) return <Loading />;
   if (!session) return <Redirect href="/(auth)/welcome" />;
   if (loading) return <Loading />;
 
-  const name = pro ? pro.business_name || pro.profile?.full_name || "" : "";
   const firstCatId = pro?.categories?.[0]?.id;
   const wh = pro?.working_hours ?? {};
   const hasHours = Object.keys(wh).length > 0;
   const banned = !!pro?.profile?.is_banned;
+  // the pill only makes sense when at least one day is actually published
+  const showStatus = hasWorkingHours(wh);
+  const openNow = showStatus && isOpenNow(wh);
+  const todayLabel = todayHoursLabel(wh, lang);
 
   const header = (
     <View
@@ -312,6 +381,62 @@ export default function ProProfileScreen() {
     </Pressable>
   );
 
+  type ProAction = {
+    key: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    label: string;
+    color: string;
+    onPress: () => void;
+    busy?: boolean;
+  };
+
+  // Call + WhatsApp only exist when we actually have a number to dial.
+  const actions: ProAction[] = [
+    ...(phone
+      ? ([
+          { key: "call", icon: "call-outline", label: t("call"), color: colors.brand, onPress: callPro },
+          {
+            key: "whatsapp",
+            icon: "logo-whatsapp",
+            label: t("proWhatsapp"),
+            color: colors.success,
+            onPress: openWhatsApp,
+          },
+        ] as ProAction[])
+      : []),
+    {
+      key: "message",
+      icon: "chatbubble-ellipses-outline",
+      label: t("message"),
+      color: colors.text,
+      onPress: openChat,
+      busy: chatLoading,
+    },
+    {
+      key: "favorite",
+      icon: isFav ? "heart" : "heart-outline",
+      label: t("proFavorite"),
+      color: isFav ? colors.danger : colors.text,
+      onPress: toggleFav,
+    },
+    { key: "share", icon: "share-social-outline", label: t("share"), color: colors.text, onPress: sharePro },
+    {
+      key: "report",
+      icon: "flag-outline",
+      label: t("report"),
+      color: colors.text,
+      onPress: () => router.push(`/report?userId=${pro.id}`),
+    },
+  ];
+
+  // three per row; pad the tail with spacers so tile widths stay consistent
+  const actionRows: (ProAction | null)[][] = [];
+  for (let i = 0; i < actions.length; i += 3) {
+    const row: (ProAction | null)[] = actions.slice(i, i + 3);
+    while (row.length < 3) row.push(null);
+    actionRows.push(row);
+  }
+
   const statChip = (
     icon: keyof typeof MaterialCommunityIcons.glyphMap,
     value: string,
@@ -395,6 +520,34 @@ export default function ProProfileScreen() {
               tone={pro.is_available ? "success" : "neutral"}
             />
           </View>
+          {/* open/closed right now, from working_hours (ui.tsx has no StatusPill yet) */}
+          {showStatus ? (
+            <View
+              style={{
+                ...ROW,
+                gap: 6,
+                backgroundColor: openNow ? colors.successTint : colors.dangerTint,
+                borderRadius: radius.full,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+              }}
+            >
+              <View
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: radius.full,
+                  backgroundColor: openNow ? colors.success : colors.danger,
+                }}
+              />
+              <Text style={{ color: openNow ? colors.success : colors.danger, fontSize: 12.5, fontWeight: "700" }}>
+                {openNow ? t("proOpenNow") : t("proClosedNow")}
+              </Text>
+              {todayLabel ? (
+                <Text style={{ color: colors.muted, fontSize: 12.5 }}>· {todayLabel}</Text>
+              ) : null}
+            </View>
+          ) : null}
           {/* stat chips: rating avg / reviews / jobs completed */}
           <View style={{ ...ROW, gap: 8, alignSelf: "stretch", marginTop: 4 }}>
             {statChip(
@@ -434,18 +587,20 @@ export default function ProProfileScreen() {
                 </Text>
               </View>
             ) : null}
-            <View style={{ ...ROW, gap: 10 }}>
-              {iconAction("chatbubble-ellipses-outline", t("message"), colors.text, openChat, chatLoading)}
-              {iconAction(
-                isFav ? "heart" : "heart-outline",
-                t("proFavorite"),
-                isFav ? colors.danger : colors.text,
-                toggleFav
-              )}
-              {iconAction("flag-outline", t("report"), colors.text, () =>
-                router.push(`/report?userId=${pro.id}`)
-              )}
-            </View>
+            {actionRows.map((row, i) => (
+              <View key={`actions-${i}`} style={{ ...ROW, gap: 10 }}>
+                {row.map((a, j) =>
+                  a ? (
+                    <React.Fragment key={a.key}>
+                      {iconAction(a.icon, a.label, a.color, a.onPress, a.busy)}
+                    </React.Fragment>
+                  ) : (
+                    // keeps the last row's tiles the same width as the row above
+                    <View key={`spacer-${i}-${j}`} style={{ flex: 1 }} />
+                  )
+                )}
+              </View>
+            ))}
             <Button
               title={t("proBookNow")}
               icon="calendar-check"

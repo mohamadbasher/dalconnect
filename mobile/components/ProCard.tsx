@@ -9,11 +9,28 @@ import { ROW, RTL_TEXT } from "../lib/rtl";
 import { Avatar, Badge } from "./ui";
 import type { ProCard as ProCardType } from "../lib/types";
 
-export function ProCard({ pro }: { pro: ProCardType }) {
+/** Promotion columns live on `professionals` but aren't in the shared row type yet. */
+type FeaturedFields = { featured?: boolean | null; featured_until?: string | null };
+
+/**
+ * A pro is *currently* featured when the flag is on and the paid window hasn't
+ * expired. Mirrors the DB's `is_featured_now(professionals)`.
+ */
+export function isFeaturedNow(row: FeaturedFields | null | undefined): boolean {
+  if (!row || !row.featured) return false;
+  if (!row.featured_until) return true;
+  const until = Date.parse(row.featured_until);
+  return Number.isNaN(until) ? true : until > Date.now();
+}
+
+export function ProCard({ pro, featured }: { pro: ProCardType; featured?: boolean }) {
   const { colors, shadows } = useTheme();
   const { t, loc } = useI18n();
   const router = useRouter();
   const name = pro.business_name || pro.profile?.full_name || "";
+  // Screens can pass it explicitly; otherwise derive it from the row when the
+  // promotion columns came back with the select.
+  const isFeatured = featured ?? isFeaturedNow(pro as ProCardType & FeaturedFields);
 
   return (
     <Pressable
@@ -30,7 +47,31 @@ export function ProCard({ pro }: { pro: ProCardType }) {
       ]}
     >
       <View style={{ ...ROW, gap: 12 }}>
-        <Avatar uri={pro.profile?.avatar_url} name={name} size={52} />
+        {/* avatar + gold rosette for promoted pros (Dal's featured-store mark) */}
+        <View style={{ width: 52, height: 52 }}>
+          <Avatar uri={pro.profile?.avatar_url} name={name} size={52} />
+          {isFeatured ? (
+            <View
+              style={{
+                position: "absolute",
+                bottom: 0,
+                left: 0,
+                width: 20,
+                height: 20,
+                borderRadius: radius.full,
+                backgroundColor: colors.gold,
+                borderWidth: 2,
+                // the ring is deliberately white in both themes so the rosette
+                // reads as a badge sitting on top of the avatar
+                borderColor: "#ffffff",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <MaterialCommunityIcons name="star" size={10} color={colors.onBrand} />
+            </View>
+          ) : null}
+        </View>
         <View style={{ flex: 1, gap: 2 }}>
           <View style={{ ...ROW, gap: 6 }}>
             <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 15.5, fontWeight: "800", flexShrink: 1 }]}>

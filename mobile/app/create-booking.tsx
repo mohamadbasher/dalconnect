@@ -2,7 +2,6 @@
 // (status 'pending'), otherwise an open request collecting offers.
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -26,12 +25,22 @@ import { supabase } from "../lib/supabase";
 import { fetchCategories, fetchCities } from "../lib/refdata";
 import { uploadImage } from "../lib/upload";
 import { getCurrentPosition } from "../lib/location";
+import { TIME_SLOTS } from "../lib/hours";
 import { ROW, RTL_TEXT } from "../lib/rtl";
 import { Avatar, Button, Card, Chip, Input, Loading, SearchBar, SectionHeader, StarRating } from "../components/ui";
+import { CalendarModal } from "../components/CalendarModal";
+import { useToast } from "../components/Toast";
 import type { Category, City, Professional, Profile } from "../lib/types";
 
 const MAX_PHOTOS = 4;
-const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 08:00 – 20:00
+
+/** merge a calendar day with an "HH:mm" slot into one Date */
+function composeAt(day: Date, slot: string): Date {
+  const [h, m] = slot.split(":");
+  const out = new Date(day);
+  out.setHours(Number(h), Number(m), 0, 0);
+  return out;
+}
 
 type ProWithProfile = Professional & { profile?: Profile };
 
@@ -39,6 +48,7 @@ export default function CreateBooking() {
   const { colors, shadows } = useTheme();
   const { t, lang, loc } = useI18n();
   const { session, profile } = useAuth();
+  const toast = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ categoryId?: string; proId?: string }>();
@@ -62,10 +72,11 @@ export default function CreateBooking() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [scheduleMode, setScheduleMode] = useState<"asap" | "pick">("asap");
-  const [dayOffset, setDayOffset] = useState<number | null>(null);
-  const [hour, setHour] = useState<number | null>(null);
+  const [pickedDate, setPickedDate] = useState<Date | null>(null);
+  const [pickedSlot, setPickedSlot] = useState<string | null>(null);
 
   // ui state
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [cityModal, setCityModal] = useState(false);
   const [citySearch, setCitySearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -126,21 +137,36 @@ export default function CreateBooking() {
     }
   }, [cityId, profile?.city_id, cities]);
 
-  const days = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() + i);
-      d.setHours(0, 0, 0, 0);
-      return d;
-    });
+  const todayStart = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
   }, []);
 
-  const dayLabel = (d: Date, i: number) => {
-    const dm = `${d.getDate()}/${d.getMonth() + 1}`;
-    if (i === 0) return `${t("today")} · ${dm}`;
-    const wd = d.toLocaleDateString(lang === "ar" ? "ar" : "he-IL", { weekday: "short" });
-    return `${wd} · ${dm}`;
+  const isToday = (d: Date) => d.toDateString() === new Date().toDateString();
+
+  const dateLabel = (d: Date) => {
+    const formatted = d.toLocaleDateString(lang === "ar" ? "ar" : "he-IL", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+    return isToday(d) ? `${t("today")} · ${formatted}` : formatted;
   };
+
+  // ---- completion meter (guidance, not a gate) ----
+  const checks = useMemo(
+    () => [
+      { key: "category", label: t("meterCategory"), done: categoryId !== null },
+      { key: "description", label: t("meterDescription"), done: description.trim().length >= 10 },
+      { key: "place", label: t("meterPlace"), done: cityId !== null || address.trim().length > 0 },
+      { key: "photos", label: t("meterPhotos"), done: photos.length > 0 },
+    ],
+    [t, categoryId, description, cityId, address, photos.length]
+  );
+  const doneCount = checks.filter((c) => c.done).length;
+  const pct = Math.round((doneCount / checks.length) * 100);
+  const complete = doneCount === checks.length;
 
   const pickPhotos = async () => {
     if (photos.length >= MAX_PHOTOS) return;
@@ -160,7 +186,7 @@ export default function CreateBooking() {
     const pos = await getCurrentPosition();
     setLocating(false);
     if (!pos) {
-      Alert.alert(t("locationFailed"));
+      toast.error(t("locationFailed"));
       return;
     }
     setCoords(pos);
@@ -180,11 +206,9 @@ export default function CreateBooking() {
     const errs: typeof errors = {};
     if (!categoryId) errs.category = t("categoryRequired");
     if (description.trim().length < 10) errs.description = t("descriptionTooShort");
-    if (scheduleMode === "pick" && (dayOffset === null || hour === null)) errs.schedule = t("pickTimeError");
-    if (scheduleMode === "pick" && dayOffset !== null && hour !== null) {
-      const d = new Date(days[dayOffset]);
-      d.setHours(hour, 0, 0, 0);
-      if (d.getTime() <= Date.now()) errs.schedule = t("pastTimeError");
+    if (scheduleMode === "pick" && (pickedDate === null || pickedSlot === null)) errs.schedule = t("pickTimeError");
+    if (scheduleMode === "pick" && pickedDate !== null && pickedSlot !== null) {
+      if (composeAt(pickedDate, pickedSlot).getTime() <= Date.now()) errs.schedule = t("pastTimeError");
     }
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
@@ -205,10 +229,8 @@ export default function CreateBooking() {
       }
       setUploadProgress(null);
       let scheduledAt: string | null = null;
-      if (scheduleMode === "pick" && dayOffset !== null && hour !== null) {
-        const d = new Date(days[dayOffset]);
-        d.setHours(hour, 0, 0, 0);
-        scheduledAt = d.toISOString();
+      if (scheduleMode === "pick" && pickedDate !== null && pickedSlot !== null) {
+        scheduledAt = composeAt(pickedDate, pickedSlot).toISOString();
       }
       const { data, error } = await supabase
         .from("bookings")
@@ -230,10 +252,10 @@ export default function CreateBooking() {
         .select("id")
         .single();
       if (error) throw error;
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      toast.success(proId ? t("bookingSentToast") : t("requestPostedToast"));
       router.replace(`/booking/${(data as { id: string }).id}` as never);
     } catch {
-      Alert.alert(t("error"));
+      toast.error(t("bookingFailedToast"));
     } finally {
       setUploadProgress(null);
       setSubmitting(false);
@@ -496,57 +518,129 @@ export default function CreateBooking() {
                 label={t("pickTime")}
                 icon="calendar-clock"
                 active={scheduleMode === "pick"}
-                onPress={() => setScheduleMode("pick")}
+                onPress={() => {
+                  setScheduleMode("pick");
+                  if (!pickedDate) setCalendarOpen(true);
+                }}
               />
             </View>
             {scheduleMode === "pick" ? (
               <View style={{ gap: spacing.md }}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                  {days
-                    .map((d, i) => ({ d, i }))
-                    .reverse()
-                    .map(({ d, i }) => (
-                      <Chip
-                        key={d.toISOString()}
-                        label={dayLabel(d, i)}
-                        active={dayOffset === i}
-                        onPress={() => {
-                          setDayOffset(i);
-                          // switching back to today can turn the chosen hour into the past
-                          if (i === 0 && hour !== null && hour <= new Date().getHours()) setHour(null);
-                          setErrors((e) => ({ ...e, schedule: undefined }));
-                        }}
-                      />
-                    ))}
-                </ScrollView>
-                <View style={{ ...ROW, gap: 8, flexWrap: "wrap" }}>
-                  {HOURS.map((h) => {
-                    const past = dayOffset === 0 && h <= now.getHours();
-                    const label = `${String(h).padStart(2, "0")}:00`;
-                    return (
-                      <View key={h} style={{ opacity: past ? 0.35 : 1 }}>
-                        <Chip
-                          label={label}
-                          active={hour === h}
-                          onPress={
-                            past
-                              ? undefined
-                              : () => {
-                                  setHour(h);
-                                  setErrors((e) => ({ ...e, schedule: undefined }));
-                                }
-                          }
-                        />
-                      </View>
-                    );
-                  })}
+                {/* date — opens the month grid */}
+                <Pressable
+                  onPress={() => setCalendarOpen(true)}
+                  style={{
+                    ...ROW,
+                    justifyContent: "space-between",
+                    backgroundColor: colors.card,
+                    borderWidth: 1.5,
+                    borderColor: colors.border,
+                    borderRadius: radius.md,
+                    paddingHorizontal: 14,
+                    paddingVertical: 13,
+                  }}
+                >
+                  <View style={{ ...ROW, gap: 8 }}>
+                    <Ionicons name="calendar-outline" size={17} color={colors.brand} />
+                    <Text style={{ color: pickedDate ? colors.text : colors.faint, fontSize: 15 }}>
+                      {pickedDate ? dateLabel(pickedDate) : t("chooseDate")}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-down" size={17} color={colors.faint} />
+                </Pressable>
+
+                {/* time — half-hour slots, RTL strip starting from the right */}
+                <View style={{ gap: 8 }}>
+                  <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, fontWeight: "700" }]}>
+                    {t("chooseHour")}
+                  </Text>
+                  <FlatList
+                    data={TIME_SLOTS}
+                    horizontal
+                    inverted
+                    keyExtractor={(s) => s}
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 8 }}
+                    renderItem={({ item }) => {
+                      const past =
+                        pickedDate !== null &&
+                        isToday(pickedDate) &&
+                        composeAt(pickedDate, item).getTime() <= now.getTime();
+                      return (
+                        <View style={{ opacity: past ? 0.35 : 1 }}>
+                          <Chip
+                            label={item}
+                            active={pickedSlot === item}
+                            onPress={
+                              past
+                                ? undefined
+                                : () => {
+                                    setPickedSlot(item);
+                                    setErrors((e) => ({ ...e, schedule: undefined }));
+                                  }
+                            }
+                          />
+                        </View>
+                      );
+                    }}
+                  />
                 </View>
+
+                {pickedDate && pickedSlot ? (
+                  <View style={{ ...ROW, gap: 6 }}>
+                    <Ionicons name="checkmark-circle" size={15} color={colors.success} />
+                    <Text style={[RTL_TEXT, { color: colors.success, fontSize: 12.5, flex: 1 }]}>
+                      {t("scheduleSummary", { date: dateLabel(pickedDate), time: pickedSlot })}
+                    </Text>
+                  </View>
+                ) : null}
                 {errors.schedule ? (
                   <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{errors.schedule}</Text>
                 ) : null}
               </View>
             ) : null}
           </View>
+
+          {/* completion meter — guidance for a request pros will actually answer */}
+          <Card style={{ gap: 10 }}>
+            <View style={{ ...ROW, gap: 12 }}>
+              <Text style={{ fontSize: 24, fontWeight: "900", color: complete ? colors.success : colors.brand }}>
+                {pct}%
+              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[RTL_TEXT, { color: colors.text, fontSize: 15, fontWeight: "800" }]}>
+                  {t("meterTitle")}
+                </Text>
+                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12, marginTop: 1 }]}>
+                  {complete ? t("meterReady") : t("meterRemaining", { n: checks.length - doneCount })}
+                </Text>
+              </View>
+            </View>
+            <View style={{ height: 7, borderRadius: radius.full, backgroundColor: colors.chip, overflow: "hidden" }}>
+              <View
+                style={{
+                  height: "100%",
+                  width: `${pct}%`,
+                  borderRadius: radius.full,
+                  backgroundColor: complete ? colors.success : colors.brand,
+                }}
+              />
+            </View>
+            <View style={{ ...ROW, flexWrap: "wrap", gap: 10, marginTop: 2 }}>
+              {checks.map((c) => (
+                <View key={c.key} style={{ ...ROW, gap: 4 }}>
+                  <Ionicons
+                    name={c.done ? "checkmark-circle" : "ellipse-outline"}
+                    size={15}
+                    color={c.done ? colors.success : colors.border}
+                  />
+                  <Text style={{ fontSize: 11.5, fontWeight: "600", color: c.done ? colors.text : colors.muted }}>
+                    {c.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </Card>
 
         </ScrollView>
 
@@ -559,7 +653,7 @@ export default function CreateBooking() {
             backgroundColor: colors.card,
             borderTopWidth: 1,
             borderTopColor: colors.border,
-            ...shadows.card,
+            ...shadows.floatUp,
           }}
         >
           <Button
@@ -575,6 +669,22 @@ export default function CreateBooking() {
           />
         </View>
       </KeyboardAvoidingView>
+
+      {/* date picker */}
+      <CalendarModal
+        visible={calendarOpen}
+        value={pickedDate}
+        title={t("chooseDate")}
+        minDate={todayStart}
+        onClose={() => setCalendarOpen(false)}
+        onSelect={(d) => {
+          setPickedDate(d);
+          setCalendarOpen(false);
+          // moving back to today can push the chosen slot into the past
+          if (pickedSlot && isToday(d) && composeAt(d, pickedSlot).getTime() <= Date.now()) setPickedSlot(null);
+          setErrors((e) => ({ ...e, schedule: undefined }));
+        }}
+      />
 
       {/* city picker bottom sheet */}
       <Modal visible={cityModal} transparent animationType="slide" onRequestClose={() => setCityModal(false)}>

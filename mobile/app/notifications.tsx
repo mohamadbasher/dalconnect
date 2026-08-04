@@ -11,6 +11,7 @@ import { supabase } from "../lib/supabase";
 import { formatTime } from "../lib/format";
 import { ROW, RTL_TEXT } from "../lib/rtl";
 import { EmptyState, Loading } from "../components/ui";
+import { notificationText } from "../lib/types";
 import type { Notification } from "../lib/types";
 
 const TYPE_ICON: Record<Notification["type"], keyof typeof Ionicons.glyphMap> = {
@@ -188,11 +189,11 @@ export default function NotificationsScreen() {
                     ]}
                     numberOfLines={2}
                   >
-                    {item.title}
+                    {notificationText(item, lang).title}
                   </Text>
-                  {item.body ? (
+                  {notificationText(item, lang).body ? (
                     <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13 }]} numberOfLines={2}>
-                      {item.body}
+                      {notificationText(item, lang).body}
                     </Text>
                   ) : null}
                   <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 11.5 }]}>

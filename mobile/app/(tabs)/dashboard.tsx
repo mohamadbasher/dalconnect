@@ -21,8 +21,19 @@ import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { formatTime } from "../../lib/format";
+import { todayHoursLabel } from "../../lib/hours";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
-import { Badge, Button, Card, Chip, EmptyState, Input, Loading, SectionHeader } from "../../components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  Input,
+  SectionHeader,
+  SkeletonList,
+} from "../../components/ui";
+import { useToast } from "../../components/Toast";
 import type { Booking, Offer, OfferStatus } from "../../lib/types";
 
 const ETA_PRESETS = [30, 60, 90, 120];
@@ -44,6 +55,7 @@ export default function DashboardScreen() {
   const { colors, shadows } = useTheme();
   const { t, lang, loc } = useI18n();
   const { session, isPro, professional } = useAuth();
+  const toast = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const uid = session?.user?.id ?? null;
@@ -185,7 +197,7 @@ export default function DashboardScreen() {
     const { error } = await supabase.from("professionals").update({ is_available: v }).eq("id", uid);
     if (error) {
       setAvailable(!v);
-      Alert.alert(t("error"));
+      toast.error(t("error"));
     } else {
       Haptics.selectionAsync().catch(() => {});
     }
@@ -199,7 +211,7 @@ export default function DashboardScreen() {
       .eq("id", b.id)
       .eq("status", "pending");
     setActingId(null);
-    if (error) Alert.alert(t("error"));
+    if (error) toast.error(t("error"));
     else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       load();
@@ -207,6 +219,7 @@ export default function DashboardScreen() {
     }
   };
 
+  // destructive — stays a real confirm dialog
   const rejectDirect = (b: Booking) => {
     Alert.alert(t("rejectConfirmTitle"), t("rejectConfirmMsg"), [
       { text: t("cancel"), style: "cancel" },
@@ -221,7 +234,7 @@ export default function DashboardScreen() {
             .eq("id", b.id)
             .eq("status", "pending");
           setActingId(null);
-          if (error) Alert.alert(t("error"));
+          if (error) toast.error(t("error"));
           else load();
         },
       },
@@ -262,20 +275,19 @@ export default function DashboardScreen() {
     if (error) {
       if ((error as any).code === "23505") {
         setOfferFor(null);
-        Alert.alert(t("alreadyOffered"));
+        toast.info(t("alreadyOffered"));
         load();
       } else {
-        Alert.alert(t("error"));
+        toast.error(t("error"));
       }
     } else {
       setOfferFor(null);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      Alert.alert(t("offerSent"));
+      toast.success(t("offerSent"));
       load();
     }
   };
 
-  if (loading) return <Loading />;
+  if (loading) return <SkeletonList count={4} />;
 
   const renderPhotosStrip = (photos: string[]) =>
     photos.length ? (
@@ -329,9 +341,18 @@ export default function DashboardScreen() {
                 color={available ? colors.success : colors.muted}
               />
             </View>
-            <Text style={[RTL_TEXT, { color: colors.text, fontSize: 15.5, fontWeight: "800", flexShrink: 1 }]}>
-              {t("availableForWork")}
-            </Text>
+            <View style={{ flexShrink: 1, gap: 2 }}>
+              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 15.5, fontWeight: "800" }]}>
+                {t("availableForWork")}
+              </Text>
+              {/* today's published working hours — tap to edit */}
+              <Pressable onPress={() => router.push("/pro-settings")} hitSlop={6} style={{ ...ROW, gap: 5 }}>
+                <Ionicons name="time-outline" size={13} color={colors.muted} />
+                <Text style={{ color: colors.muted, fontSize: 12.5 }}>
+                  {todayHoursLabel(professional.working_hours, lang) ?? t("setHoursHint")}
+                </Text>
+              </Pressable>
+            </View>
           </View>
           <View
             style={{

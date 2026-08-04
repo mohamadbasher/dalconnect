@@ -242,6 +242,7 @@ export function SideMenu({ visible, onClose }: { visible: boolean; onClose: () =
                 Linking.openURL(SUPPORT_WHATSAPP_URL).catch(() => {});
               }}
             />
+            <MenuRow icon="document-text-outline" label={t("legalTitle")} onPress={() => go("/legal")} />
 
             <Text
               style={{

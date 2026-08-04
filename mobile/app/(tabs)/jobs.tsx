@@ -8,7 +8,7 @@ import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { ROW } from "../../lib/rtl";
 import { BookingCard } from "../../components/BookingCard";
-import { Button, EmptyState, Loading } from "../../components/ui";
+import { Button, EmptyState, SkeletonList } from "../../components/ui";
 import type { Booking, BookingStatus } from "../../lib/types";
 
 type Segment = "active" | "done" | "other";
@@ -89,11 +89,11 @@ export default function JobsScreen() {
     );
   }
 
-  if (loading) return <Loading />;
+  if (loading) return <SkeletonList count={5} />;
 
   const segLabel: Record<Segment, string> = {
-    active: t("segActive"),
-    done: t("segDone"),
+    active: t("proSegActive"),
+    done: t("proSegDone"),
     other: t("segOther"),
   };
 

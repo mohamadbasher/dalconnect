@@ -1,5 +1,12 @@
 import { S } from "@/lib/strings";
-import type { BookingStatus, OfferStatus, ReportStatus, UserRole, VerificationStatus } from "@/lib/types";
+import type {
+  BookingStatus,
+  OfferStatus,
+  ReportStatus,
+  ReviewStatus,
+  UserRole,
+  VerificationStatus,
+} from "@/lib/types";
 
 const BOOKING_STYLES: Record<BookingStatus, string> = {
   open: "bg-sky-50 text-sky-700 border border-sky-200",
@@ -116,6 +123,56 @@ export function OfferStatusBadge({ status }: { status: OfferStatus }) {
   return (
     <span className={`badge ${OFFER_STYLES[status] ?? OFFER_STYLES.pending}`}>
       {OFFER_LABELS[status] ?? status}
+    </span>
+  );
+}
+
+const REVIEW_STYLES: Record<ReviewStatus, string> = {
+  published: "bg-green-50 text-green-700 border border-green-200",
+  hidden: "bg-stone-100 text-stone-600 border border-stone-200",
+};
+
+const REVIEW_LABELS: Record<ReviewStatus, string> = {
+  published: S.reviewPublished,
+  hidden: S.reviewHidden,
+};
+
+export function ReviewStatusBadge({ status }: { status: ReviewStatus }) {
+  return (
+    <span className={`badge ${REVIEW_STYLES[status] ?? REVIEW_STYLES.published}`}>
+      {status === "hidden" ? "🚫 " : ""}
+      {REVIEW_LABELS[status] ?? status}
+    </span>
+  );
+}
+
+/**
+ * Audit rows store the role as free text snapshotted at write time, so it can
+ * hold a value that is no longer a valid UserRole (or an empty string).
+ */
+export function ActorRoleBadge({ role }: { role: string }) {
+  const known = ROLE_LABELS[role as UserRole];
+  if (known) return <RoleBadge role={role as UserRole} />;
+  return (
+    <span className="badge border border-stone-200 bg-stone-100 text-stone-600">
+      {role || S.none}
+    </span>
+  );
+}
+
+export type FeaturedState = "active" | "expired" | "off";
+
+export function FeaturedBadge({ state }: { state: FeaturedState }) {
+  if (state === "off") return <span className="text-xs text-[#8a7a6d]">{S.none}</span>;
+  return (
+    <span
+      className={`badge ${
+        state === "active"
+          ? "border border-amber-300 bg-amber-50 text-amber-700"
+          : "border border-red-200 bg-red-50 text-red-700"
+      }`}
+    >
+      {state === "active" ? `★ ${S.featuredActiveBadge}` : `⌛ ${S.featuredExpiredBadge}`}
     </span>
   );
 }

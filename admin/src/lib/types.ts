@@ -56,3 +56,33 @@ export type Banner = {
   is_active: boolean;
   created_at: string;
 };
+
+// --- 20260714000004_bilingual_and_admin.sql ---
+
+/** The four keys the `legal_pages` CHECK constraint allows. */
+export type LegalPageKey = "terms" | "privacy" | "about" | "contact";
+
+export type LegalPage = {
+  key: LegalPageKey;
+  title_ar: string;
+  title_he: string;
+  body_ar: string;
+  body_he: string;
+  updated_at: string;
+};
+
+export type ReviewStatus = "published" | "hidden";
+
+export type AuditLog = {
+  id: string;
+  actor_id: string | null;
+  /** Snapshotted at write time — see the note in the audit page. */
+  actor_name: string;
+  actor_role: string;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  summary: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};

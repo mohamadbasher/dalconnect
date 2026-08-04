@@ -37,8 +37,30 @@ export const booking: Dict = {
   pickTime: { ar: "تحديد موعد", he: "בחירת מועד" },
   pickTimeError: { ar: "اختر اليوم والساعة", he: "בחרו יום ושעה" },
   pastTimeError: { ar: "الوقت المختار قد مضى — اختر وقتاً لاحقاً", he: "השעה שנבחרה כבר עברה — בחרו שעה מאוחרת יותר" },
+  chooseDate: { ar: "اختر اليوم", he: "בחרו יום" },
+  chooseHour: { ar: "اختر الساعة", he: "בחרו שעה" },
+  scheduleSummary: { ar: "موعدك: {date} الساعة {time}", he: "המועד שלכם: {date} בשעה {time}" },
   submitBooking: { ar: "إرسال الطلب", he: "שליחת הבקשה" },
   uploadingPhotos: { ar: "جاري رفع الصور… {n}/{total}", he: "מעלים תמונות… {n}/{total}" },
+
+  // ----- completion meter -----
+  meterTitle: { ar: "اكتمال الطلب", he: "שלמות הבקשה" },
+  meterReady: { ar: "طلبك واضح وجاهز للإرسال ✨", he: "הבקשה ברורה ומוכנה לשליחה ✨" },
+  meterRemaining: {
+    ar: "أضف {n} تفاصيل ليصلك عروض أدق",
+    he: "הוסיפו עוד {n} פרטים כדי לקבל הצעות מדויקות יותר",
+  },
+  meterCategory: { ar: "الفئة", he: "קטגוריה" },
+  meterDescription: { ar: "الوصف", he: "תיאור" },
+  meterPlace: { ar: "الموقع", he: "מיקום" },
+  meterPhotos: { ar: "الصور", he: "תמונות" },
+
+  // ----- toasts -----
+  bookingSentToast: { ar: "تم إرسال طلبك للمهني", he: "הבקשה נשלחה לבעל המקצוע" },
+  requestPostedToast: { ar: "نشرنا طلبك — بانتظار العروض", he: "פרסמנו את הבקשה — ממתינים להצעות" },
+  bookingFailedToast: { ar: "تعذر إرسال الطلب — حاول مرة أخرى", he: "שליחת הבקשה נכשלה — נסו שוב" },
+  offerAcceptedToast: { ar: "تم قبول عرض {name}", he: "ההצעה של {name} התקבלה" },
+  bookingCancelledToast: { ar: "تم إلغاء الطلب", he: "ההזמנה בוטלה" },
 
   // ----- bookings tab -----
   segActive: { ar: "جارية", he: "פעילות" },
@@ -78,6 +100,15 @@ export const booking: Dict = {
   cancelConfirm: { ar: "هل أنت متأكد من إلغاء هذا الطلب؟", he: "האם לבטל את ההזמנה?" },
   cancelReasonPlaceholder: { ar: "سبب الإلغاء (اختياري)", he: "סיבת הביטול (אופציונלי)" },
   keepBooking: { ar: "تراجع", he: "חזרה" },
+  cancelLockedWorking: {
+    ar: "بدأ المهني بتنفيذ العمل، لذلك لم يعد بالإمكان إلغاء الطلب من التطبيق.",
+    he: "בעל המקצוע כבר התחיל בעבודה, ולכן לא ניתן לבטל את ההזמנה מהאפליקציה.",
+  },
+  cancelLockedDone: {
+    ar: "انتهى هذا الطلب، ولم يعد بالإمكان إلغاؤه.",
+    he: "ההזמנה הזו הסתיימה ולא ניתן לבטל אותה.",
+  },
+  contactProCta: { ar: "تواصل مع المهني", he: "יצירת קשר עם בעל המקצוע" },
   cancelReasonLabel: { ar: "سبب الإلغاء", he: "סיבת הביטול" },
   cancelledBanner: { ar: "تم إلغاء هذا الطلب", he: "ההזמנה בוטלה" },
   rejectedBanner: { ar: "عذراً، تم رفض هذا الطلب", he: "מצטערים, הבקשה נדחתה" },

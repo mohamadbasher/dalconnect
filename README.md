@@ -91,6 +91,21 @@ docs/       AGENT_BRIEF.md — internal conventions & foundation API reference
 9. **This is a private business project** (aiming to be a leading Israeli service
    marketplace) — keep the GitHub repo private unless there's a specific reason to
    open it up.
+10. **The legal text in `mobile/app/legal.tsx` is a DRAFT, not legal advice.** It
+    exists so the app satisfies the store requirement that terms + a privacy policy
+    are reachable in-app. Review it (and fill `LEGAL_CONTACT` — company name, support
+    email) before public launch. The admin panel's `/legal` page overrides this text
+    at runtime, so you can correct it without shipping a new build.
+11. **Commission is currently modelled as 10% of each cash job** (`app_settings.commission_rate`,
+    computed by a DB trigger into `transactions`). Be aware this is hard to *collect* —
+    the customer pays the professional in cash directly, so the platform never touches
+    the money and relies on pros self-reporting. The sibling Dal project hit exactly
+    this wall and pivoted to a **flat monthly subscription per professional** plus a
+    small buyer-side service fee. Worth deciding before you sign up real pros; the
+    schema supports either (see the v2 backlog).
+12. **Supabase free-tier projects pause when idle.** If API calls suddenly time out,
+    check the project status — it may need restoring from the dashboard (this already
+    happened once during development).
 
 ---
 
@@ -157,7 +172,14 @@ not part of the app runtime:
 - Push requires the manual edge-function deploy + webhook step above.
 
 ## v2 backlog (designed for, not built)
+- **Monthly subscription billing for professionals** — a `pro_billing` ledger, one row
+  per pro per `YYYY-MM` period, with status pending/paid/waived and per-pro overrides
+  (free months, discounts). Far more collectible than per-job commission on cash work.
+  See important note #11.
 - Card payments / Apple Pay / Google Pay via an Israeli PSP (PayPlus/Tranzila), wallet
   withdrawals for professionals.
 - Real SMS OTP (Twilio/Vonage) replacing password auth.
-- Voice messages in chat; coupons; promoted/featured professionals.
+- Coupons / promo codes with race-safe redemption.
+- Saved job-site address book (a customer's home/office as reusable addresses).
+- Shared-device fraud detection (flag when many accounts share one device id).
+- Voice messages in chat.

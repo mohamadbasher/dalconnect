@@ -6,7 +6,7 @@ import { supabase } from "../../lib/supabase";
 import { useTheme, spacing } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
-import { Button, EmptyState, Loading } from "../../components/ui";
+import { Button, EmptyState, SkeletonList } from "../../components/ui";
 import { ProCard } from "../../components/ProCard";
 import type { ProCard as ProCardType } from "../../lib/types";
 
@@ -75,7 +75,7 @@ export default function FavoritesScreen() {
   };
 
   if (!session) return null; // tabs layout redirects; safety guard
-  if (loading) return <Loading />;
+  if (loading) return <SkeletonList count={4} />;
 
   return (
     <FlatList

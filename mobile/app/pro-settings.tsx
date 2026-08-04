@@ -1,5 +1,5 @@
 // Pro settings — business info, categories, working hours, verification, gallery.
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Dimensions,
@@ -9,7 +9,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Switch,
   Text,
   View,
 } from "react-native";
@@ -18,7 +17,6 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Redirect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
-import * as Haptics from "expo-haptics";
 import { useTheme, radius, spacing } from "../lib/theme";
 import { useI18n } from "../lib/i18n";
 import { useAuth } from "../context/AuthContext";
@@ -26,19 +24,30 @@ import { supabase } from "../lib/supabase";
 import { fetchCategories, fetchCities } from "../lib/refdata";
 import { uploadImage } from "../lib/upload";
 import { ROW, RTL_TEXT } from "../lib/rtl";
-import { Badge, Button, Card, Chip, Input, Loading, SearchBar, SectionHeader } from "../components/ui";
+import { todayHoursLabel } from "../lib/hours";
+import {
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  Chip,
+  Input,
+  Loading,
+  SearchBar,
+  SectionHeader,
+  StarRating,
+} from "../components/ui";
+import { HoursEditor, type WorkingHours } from "../components/HoursEditor";
+import { useToast } from "../components/Toast";
 import type { Category, City, GalleryItem, Professional, VerificationStatus } from "../lib/types";
 
-type WorkingHours = Record<string, { from: string; to: string } | null>;
-
-const HOURS = Array.from({ length: 18 }, (_, i) => `${String(i + 6).padStart(2, "0")}:00`);
-const DAY_KEYS = ["day0", "day1", "day2", "day3", "day4", "day5", "day6"];
 const MAX_GALLERY = 12;
 
 export default function ProSettingsScreen() {
   const { colors, shadows } = useTheme();
-  const { t, loc } = useI18n();
-  const { session, isPro, professional, refresh } = useAuth();
+  const { t, lang, loc } = useI18n();
+  const { session, profile, isPro, professional, refresh } = useAuth();
+  const toast = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const uid = session?.user?.id ?? null;
@@ -62,7 +71,6 @@ export default function ProSettingsScreen() {
 
   // section 3 — working hours
   const [wh, setWh] = useState<WorkingHours>({});
-  const [timeModal, setTimeModal] = useState<{ day: number; field: "from" | "to" } | null>(null);
   const [savingHours, setSavingHours] = useState(false);
 
   // section 4 — verification
@@ -73,16 +81,8 @@ export default function ProSettingsScreen() {
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [uploadingGallery, setUploadingGallery] = useState(false);
 
-  // transient "saved" feedback per section
-  type SavedSection = "info" | "cats" | "hours" | "verify" | "gallery";
-  const [savedSection, setSavedSection] = useState<SavedSection | null>(null);
-  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (savedTimer.current) clearTimeout(savedTimer.current);
-    },
-    []
-  );
+  // public-profile preview
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!uid) return;
@@ -130,19 +130,14 @@ export default function ProSettingsScreen() {
   if (loading) return <Loading />;
 
   const selectedCity = cities.find((c) => c.id === cityId) ?? null;
-  const showSaved = (section: SavedSection) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    setSavedSection(section);
-    if (savedTimer.current) clearTimeout(savedTimer.current);
-    savedTimer.current = setTimeout(() => setSavedSection(null), 2500);
-  };
-  const SavedNote = ({ section }: { section: SavedSection }) =>
-    savedSection === section ? (
-      <View style={{ ...ROW, gap: 6, justifyContent: "center" }}>
-        <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-        <Text style={{ color: colors.success, fontSize: 13, fontWeight: "700" }}>{t("saved")}</Text>
-      </View>
-    ) : null;
+  const selectedCategories = categories.filter((c) => selectedCats.includes(c.id));
+
+  // what's still missing from the public-facing profile
+  const missing: string[] = [];
+  if (!profile?.avatar_url) missing.push(t("missingPhoto"));
+  if (bio.trim().length < 10) missing.push(t("missingBio"));
+  if (gallery.length === 0) missing.push(t("missingGallery"));
+  if (verification !== "approved") missing.push(t("missingVerification"));
 
   // ---------- section handlers ----------
   const saveInfo = async () => {
@@ -156,9 +151,9 @@ export default function ProSettingsScreen() {
       .update({ business_name: name.trim(), bio: bio.trim(), city_id: cityId })
       .eq("id", uid);
     setSavingInfo(false);
-    if (error) Alert.alert(t("error"));
+    if (error) toast.error(t("error"));
     else {
-      showSaved("info");
+      toast.success(t("saved"));
       refresh().catch(() => {});
     }
   };
@@ -167,7 +162,7 @@ export default function ProSettingsScreen() {
     setSelectedCats((prev) => {
       if (prev.includes(id)) return prev.filter((c) => c !== id);
       if (prev.length >= 5) {
-        Alert.alert(t("maxCategoriesMsg"));
+        toast.info(t("maxCategoriesMsg"));
         return prev;
       }
       return [...prev, id];
@@ -176,7 +171,7 @@ export default function ProSettingsScreen() {
 
   const saveCats = async () => {
     if (selectedCats.length === 0) {
-      Alert.alert(t("minCategoriesMsg"));
+      toast.info(t("minCategoriesMsg"));
       return;
     }
     setSavingCats(true);
@@ -190,31 +185,23 @@ export default function ProSettingsScreen() {
         .from("professional_categories")
         .insert(selectedCats.map((category_id) => ({ professional_id: uid, category_id })));
       if (insErr) throw insErr;
-      showSaved("cats");
+      toast.success(t("saved"));
     } catch {
-      Alert.alert(t("error"));
+      toast.error(t("error"));
     } finally {
       setSavingCats(false);
     }
-  };
-
-  const toggleDay = (day: number, on: boolean) => {
-    setWh((prev) => ({ ...prev, [String(day)]: on ? { from: "08:00", to: "18:00" } : null }));
-  };
-
-  const setDayTime = (day: number, field: "from" | "to", value: string) => {
-    setWh((prev) => {
-      const cur = prev[String(day)] ?? { from: "08:00", to: "18:00" };
-      return { ...prev, [String(day)]: { ...cur, [field]: value } };
-    });
   };
 
   const saveHours = async () => {
     setSavingHours(true);
     const { error } = await supabase.from("professionals").update({ working_hours: wh }).eq("id", uid);
     setSavingHours(false);
-    if (error) Alert.alert(t("error"));
-    else showSaved("hours");
+    if (error) toast.error(t("error"));
+    else {
+      toast.success(t("saved"));
+      refresh().catch(() => {});
+    }
   };
 
   const uploadIdDoc = async () => {
@@ -235,9 +222,9 @@ export default function ProSettingsScreen() {
       if (error) throw error;
       setVerification("pending");
       refresh().catch(() => {});
-      showSaved("verify");
+      toast.success(t("saved"));
     } catch {
-      Alert.alert(t("uploadFailed"));
+      toast.error(t("uploadFailed"));
     } finally {
       setUploadingId(false);
     }
@@ -245,7 +232,7 @@ export default function ProSettingsScreen() {
 
   const addGalleryPhoto = async () => {
     if (gallery.length >= MAX_GALLERY) {
-      Alert.alert(t("galleryFull"));
+      toast.info(t("galleryFull"));
       return;
     }
     try {
@@ -265,14 +252,15 @@ export default function ProSettingsScreen() {
         .single();
       if (error) throw error;
       setGallery((prev) => [data as unknown as GalleryItem, ...prev]);
-      showSaved("gallery");
+      toast.success(t("saved"));
     } catch {
-      Alert.alert(t("uploadFailed"));
+      toast.error(t("uploadFailed"));
     } finally {
       setUploadingGallery(false);
     }
   };
 
+  // destructive — stays a real confirm dialog
   const deleteGalleryItem = (item: GalleryItem) => {
     Alert.alert(t("deletePhotoTitle"), t("deletePhotoMsg"), [
       { text: t("cancel"), style: "cancel" },
@@ -281,7 +269,7 @@ export default function ProSettingsScreen() {
         style: "destructive",
         onPress: async () => {
           const { error } = await supabase.from("gallery_items").delete().eq("id", item.id);
-          if (error) Alert.alert(t("error"));
+          if (error) toast.error(t("error"));
           else setGallery((prev) => prev.filter((g) => g.id !== item.id));
         },
       },
@@ -352,6 +340,42 @@ export default function ProSettingsScreen() {
           contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl }}
           keyboardShouldPersistTaps="handled"
         >
+          {/* see-it-as-a-customer preview */}
+          <Pressable
+            onPress={() => setPreviewOpen(true)}
+            style={({ pressed }) => ({
+              ...ROW,
+              gap: 10,
+              backgroundColor: colors.brandTint,
+              borderWidth: 1.5,
+              borderColor: colors.brand,
+              borderRadius: radius.lg,
+              paddingHorizontal: spacing.lg,
+              paddingVertical: 13,
+              transform: [{ scale: pressed ? 0.98 : 1 }],
+            })}
+          >
+            <Ionicons name="eye-outline" size={20} color={colors.brand} />
+            <Text style={[RTL_TEXT, { color: colors.brand, fontSize: 14.5, fontWeight: "800", flex: 1 }]}>
+              {t("previewCta")}
+            </Text>
+            {missing.length ? (
+              <View
+                style={{
+                  minWidth: 20,
+                  height: 20,
+                  paddingHorizontal: 6,
+                  borderRadius: radius.full,
+                  backgroundColor: colors.warnTint,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ color: colors.warn, fontSize: 11.5, fontWeight: "800" }}>{missing.length}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+
           {/* 1 — business info */}
           <Card style={{ gap: spacing.md }}>
             <SectionHeader title={t("businessInfoTitle")} />
@@ -395,7 +419,6 @@ export default function ProSettingsScreen() {
               </Pressable>
             </View>
             <Button title={t("save")} icon="content-save" loading={savingInfo} onPress={saveInfo} />
-            <SavedNote section="info" />
           </Card>
 
           {/* 2 — categories */}
@@ -414,56 +437,20 @@ export default function ProSettingsScreen() {
               ))}
             </View>
             <Button title={t("save")} icon="content-save" loading={savingCats} onPress={saveCats} />
-            <SavedNote section="cats" />
           </Card>
 
           {/* 3 — working hours */}
           <Card style={{ gap: spacing.md }}>
             <SectionHeader title={t("workingHoursTitle")} />
-            {DAY_KEYS.map((dayKey, day) => {
-              const cur = wh[String(day)] ?? null;
-              return (
-                <View key={dayKey} style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
-                  <View style={{ ...ROW, gap: 8, width: 118 }}>
-                    <Switch
-                      value={!!cur}
-                      onValueChange={(v) => toggleDay(day, v)}
-                      trackColor={{ false: colors.chip, true: colors.brand }}
-                      thumbColor={colors.onBrand}
-                    />
-                    <Text
-                      numberOfLines={1}
-                      style={{ color: cur ? colors.text : colors.faint, fontSize: 13.5, fontWeight: "700", flexShrink: 1 }}
-                    >
-                      {t(dayKey)}
-                    </Text>
-                  </View>
-                  {cur ? (
-                    <View style={{ ...ROW, gap: 6 }}>
-                      <Chip
-                        label={`${t("fromLabel")} ${cur.from}`}
-                        onPress={() => setTimeModal({ day, field: "from" })}
-                      />
-                      <Chip
-                        label={`${t("toLabel")} ${cur.to}`}
-                        onPress={() => setTimeModal({ day, field: "to" })}
-                      />
-                    </View>
-                  ) : (
-                    <Text style={{ color: colors.faint, fontSize: 12.5 }}>{t("closedLabel")}</Text>
-                  )}
-                </View>
-              );
-            })}
+            <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12 }]}>{t("hoursHint")}</Text>
+            <HoursEditor value={wh} onChange={setWh} />
             <Button title={t("save")} icon="content-save" loading={savingHours} onPress={saveHours} />
-            <SavedNote section="hours" />
           </Card>
 
           {/* 4 — verification */}
           <Card style={{ gap: spacing.md }}>
             <SectionHeader title={t("verificationTitle")} />
             {verificationCard()}
-            <SavedNote section="verify" />
           </Card>
 
           {/* 5 — gallery */}
@@ -522,7 +509,6 @@ export default function ProSettingsScreen() {
                 </View>
               ))}
             </View>
-            <SavedNote section="gallery" />
           </Card>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -543,7 +529,7 @@ export default function ProSettingsScreen() {
             }}
           >
             <Text style={[RTL_TEXT, { color: colors.text, fontSize: 16, fontWeight: "800" }]}>{t("selectCity")}</Text>
-            <SearchBar value={citySearch} onChangeText={setCitySearch} placeholder={t("searchCity")} />
+            <SearchBar value={citySearch} onChangeText={setCitySearch} placeholder={t("proSearchCity")} />
             <FlatList
               data={filteredCities}
               keyExtractor={(c) => String(c.id)}
@@ -573,40 +559,188 @@ export default function ProSettingsScreen() {
         </View>
       </Modal>
 
-      {/* hour picker bottom sheet */}
-      <Modal visible={!!timeModal} transparent animationType="slide" onRequestClose={() => setTimeModal(null)}>
-        <View style={{ flex: 1, backgroundColor: colors.overlay }}>
-          <Pressable style={{ flex: 1 }} onPress={() => setTimeModal(null)} />
+      {/* public-profile preview — "how a customer sees you" */}
+      <Modal visible={previewOpen} animationType="slide" onRequestClose={() => setPreviewOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: colors.bg }}>
           <View
             style={{
+              ...ROW,
+              gap: 12,
+              paddingTop: insets.top + 8,
+              paddingBottom: 12,
+              paddingHorizontal: spacing.lg,
               backgroundColor: colors.card,
-              borderTopLeftRadius: radius.xl,
-              borderTopRightRadius: radius.xl,
-              padding: spacing.lg,
-              paddingBottom: insets.bottom + spacing.lg,
-              gap: spacing.md,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.border,
             }}
           >
-            <Text style={[RTL_TEXT, { color: colors.text, fontSize: 16, fontWeight: "800" }]}>
-              {t("selectHour")}
-            </Text>
-            <View style={{ ...ROW, flexWrap: "wrap", gap: 8, justifyContent: "flex-start" }}>
-              {HOURS.map((h) => {
-                const active =
-                  !!timeModal && (wh[String(timeModal.day)] ?? { from: "", to: "" })[timeModal.field] === h;
-                return (
-                  <Chip
-                    key={h}
-                    label={h}
-                    active={active}
-                    onPress={() => {
-                      if (timeModal) setDayTime(timeModal.day, timeModal.field, h);
-                      setTimeModal(null);
-                    }}
-                  />
-                );
-              })}
+            <Pressable
+              onPress={() => setPreviewOpen(false)}
+              hitSlop={10}
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: radius.full,
+                backgroundColor: colors.chip,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="close" size={22} color={colors.text} />
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 16, fontWeight: "800" }]}>
+                {t("previewTitle")}
+              </Text>
+              <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12 }]}>{t("previewSubtitle")}</Text>
             </View>
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl }}>
+            {/* what's still missing */}
+            <View
+              style={{
+                ...ROW,
+                gap: 8,
+                backgroundColor: missing.length ? colors.warnTint : colors.successTint,
+                borderRadius: radius.md,
+                padding: spacing.md,
+              }}
+            >
+              <Ionicons
+                name={missing.length ? "alert-circle" : "checkmark-circle"}
+                size={16}
+                color={missing.length ? colors.warn : colors.success}
+              />
+              <Text
+                style={[
+                  RTL_TEXT,
+                  {
+                    flex: 1,
+                    fontSize: 12.5,
+                    fontWeight: "700",
+                    color: missing.length ? colors.warn : colors.success,
+                  },
+                ]}
+              >
+                {missing.length ? t("previewMissing", { items: missing.join("، ") }) : t("previewAllGood")}
+              </Text>
+            </View>
+
+            {/* the public card */}
+            <Card style={{ gap: spacing.md }}>
+              <View style={{ ...ROW, gap: 12 }}>
+                <Avatar uri={profile?.avatar_url} name={name || profile?.full_name} size={64} />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <View style={{ ...ROW, gap: 6 }}>
+                    <Text
+                      numberOfLines={1}
+                      style={[RTL_TEXT, { color: colors.text, fontSize: 17, fontWeight: "800", flexShrink: 1 }]}
+                    >
+                      {name || t("businessNameLabel")}
+                    </Text>
+                    {verification === "approved" ? (
+                      <MaterialCommunityIcons name="check-decagram" size={18} color={colors.success} />
+                    ) : null}
+                  </View>
+                  {selectedCity ? (
+                    <View style={{ ...ROW, gap: 4 }}>
+                      <Ionicons name="location-outline" size={13} color={colors.faint} />
+                      <Text style={{ color: colors.muted, fontSize: 12.5 }}>{loc(selectedCity, "name")}</Text>
+                    </View>
+                  ) : null}
+                  <View style={{ ...ROW, gap: 6 }}>
+                    {professional.rating_count > 0 ? (
+                      <>
+                        <StarRating rating={professional.rating_avg} size={13} />
+                        <Text style={{ color: colors.muted, fontSize: 12 }}>
+                          {professional.rating_avg.toFixed(1)} ({professional.rating_count})
+                        </Text>
+                      </>
+                    ) : (
+                      <Badge label={t("newPro")} tone="brand" />
+                    )}
+                  </View>
+                </View>
+              </View>
+
+              {/* today's hours */}
+              <View style={{ ...ROW, gap: 6 }}>
+                <Ionicons name="time-outline" size={15} color={colors.brand} />
+                <Text style={[RTL_TEXT, { color: colors.text, fontSize: 13, flexShrink: 1 }]}>
+                  {todayHoursLabel(wh, lang) ?? t("setHoursHint")}
+                </Text>
+              </View>
+
+              {/* categories */}
+              {selectedCategories.length ? (
+                <View style={{ ...ROW, flexWrap: "wrap", gap: 8, justifyContent: "flex-start" }}>
+                  {selectedCategories.map((c) => (
+                    <View
+                      key={c.id}
+                      style={{
+                        ...ROW,
+                        gap: 5,
+                        backgroundColor: colors.chip,
+                        borderRadius: radius.full,
+                        paddingHorizontal: 11,
+                        paddingVertical: 6,
+                      }}
+                    >
+                      <MaterialCommunityIcons name={c.icon as any} size={13} color={colors.brand} />
+                      <Text style={{ color: colors.text, fontSize: 12.5, fontWeight: "600" }}>
+                        {loc(c, "name")}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              {/* bio */}
+              <Text
+                style={[
+                  RTL_TEXT,
+                  { color: bio.trim() ? colors.text : colors.faint, fontSize: 13.5, lineHeight: 21 },
+                ]}
+              >
+                {bio.trim() || t("noBioYet")}
+              </Text>
+            </Card>
+
+            {/* gallery strip */}
+            <Card style={{ gap: spacing.md }}>
+              <SectionHeader title={t("galleryTitle")} />
+              {gallery.length ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 8, flexDirection: "row-reverse" }}
+                >
+                  {gallery.map((g) => (
+                    <Image
+                      key={g.id}
+                      source={{ uri: g.image_url }}
+                      style={{ width: 110, height: 110, borderRadius: radius.md, backgroundColor: colors.chip }}
+                      contentFit="cover"
+                    />
+                  ))}
+                </ScrollView>
+              ) : (
+                <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 13 }]}>{t("noGalleryYet")}</Text>
+              )}
+            </Card>
+          </ScrollView>
+
+          <View
+            style={{
+              padding: spacing.lg,
+              paddingBottom: insets.bottom + spacing.lg,
+              backgroundColor: colors.card,
+              borderTopWidth: 1,
+              borderTopColor: colors.border,
+            }}
+          >
+            <Button title={t("previewBackToEdit")} icon="pencil" onPress={() => setPreviewOpen(false)} />
           </View>
         </View>
       </Modal>

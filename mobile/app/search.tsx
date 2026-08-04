@@ -20,7 +20,7 @@ import { useI18n } from "../lib/i18n";
 import { useAuth } from "../context/AuthContext";
 import { fetchCategories, fetchCities } from "../lib/refdata";
 import { ROW, RTL_TEXT } from "../lib/rtl";
-import { Button, Chip, EmptyState, Loading, SectionHeader } from "../components/ui";
+import { Button, Chip, EmptyState, Loading, SectionHeader, SkeletonList } from "../components/ui";
 import { ProCard } from "../components/ProCard";
 import type { Category, City, ProCard as ProCardType } from "../lib/types";
 
@@ -189,7 +189,6 @@ export default function SearchScreen() {
   const params = useLocalSearchParams<{ categoryId?: string; q?: string }>();
 
   const [q, setQ] = useState(params.q ?? "");
-  const [debouncedQ, setDebouncedQ] = useState(params.q ?? "");
   const [cityId, setCityId] = useState<number | null>(null);
   const [categoryId, setCategoryId] = useState<number | null>(
     params.categoryId ? Number(params.categoryId) || null : null
@@ -200,25 +199,24 @@ export default function SearchScreen() {
 
   const [cities, setCities] = useState<City[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
-  const [rows, setRows] = useState<ProCardType[]>([]);
+  const [results, setResults] = useState<ProCardType[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
+  /** true once a query actually came back — separates "no results" from "not searched yet" */
+  const [searched, setSearched] = useState(false);
 
   const [sheet, setSheet] = useState<"city" | "category" | "sort" | null>(null);
-
-  // debounce the text query 300ms
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQ(q), 300);
-    return () => clearTimeout(timer);
-  }, [q]);
 
   useEffect(() => {
     fetchCities().then(setCities).catch(() => {});
     fetchCategories().then(setCats).catch(() => {});
   }, []);
 
-  const load = useCallback(async () => {
+  // A single runner over *all* inputs (text + every filter). Because the effect
+  // below depends on the callback identity, changing any one of them restarts
+  // the same 300ms debounce instead of firing an extra un-debounced query.
+  const run = useCallback(async () => {
     try {
       setError(false);
       let query = supabase
@@ -235,41 +233,55 @@ export default function SearchScreen() {
           : query.order("created_at", { ascending: false });
       const { data, error: err } = await query.limit(100);
       if (err) throw err;
-      setRows(((data as any[]) ?? []).map(mapPro));
+      const mapped = ((data as any[]) ?? []).map(mapPro);
+      // free-text match applied client-side (business_name, bio and profile name in ar/he)
+      const needle = q.trim().toLowerCase();
+      setResults(
+        needle
+          ? mapped.filter((p) =>
+              [p.business_name, p.bio, p.profile?.full_name ?? ""]
+                .join(" ")
+                .toLowerCase()
+                .includes(needle)
+            )
+          : mapped
+      );
+      setSearched(true);
     } catch {
+      setResults([]);
       setError(true);
+    } finally {
+      setLoading(false);
     }
-  }, [categoryId, cityId, availableOnly, verifiedOnly, sort]);
+  }, [q, categoryId, cityId, availableOnly, verifiedOnly, sort]);
 
   useEffect(() => {
+    // flip to the skeleton the moment an input changes, so the list never shows
+    // stale results for the 300ms the debounce is still waiting
     setLoading(true);
-    load().finally(() => setLoading(false));
-  }, [load]);
+    const timer = setTimeout(run, 300);
+    return () => clearTimeout(timer);
+  }, [run]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await load();
+    await run();
     setRefreshing(false);
   };
 
-  // free-text match applied client-side (covers business_name, bio and profile name in ar/he)
-  const results = useMemo(() => {
-    const needle = debouncedQ.trim().toLowerCase();
-    if (!needle) return rows;
-    return rows.filter((p) =>
-      [p.business_name, p.bio, p.profile?.full_name ?? ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle)
-    );
-  }, [rows, debouncedQ]);
+  const clearFilters = useCallback(() => {
+    setQ("");
+    setCityId(null);
+    setCategoryId(null);
+    setAvailableOnly(false);
+    setVerifiedOnly(false);
+  }, []);
 
   if (authLoading) return <Loading />;
   if (!session) return <Redirect href="/(auth)/welcome" />;
 
   // nothing typed + no filter → search doubles as a "browse all categories" screen
   const browsing =
-    debouncedQ.trim().length === 0 &&
     q.trim().length === 0 &&
     cityId == null &&
     categoryId == null &&
@@ -450,7 +462,42 @@ export default function SearchScreen() {
           {cats.length === 0 ? <EmptyState icon="shape-outline" title={t("noResults")} /> : null}
         </ScrollView>
       ) : loading ? (
-        <Loading />
+        <SkeletonList count={5} />
+      ) : error ? (
+        /* (a) the query itself failed — network/server, not an empty result set */
+        <ScrollView
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: "center",
+            padding: spacing.lg,
+            gap: spacing.md,
+          }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} colors={[colors.brand]} />
+          }
+        >
+          <View
+            style={{
+              backgroundColor: colors.dangerTint,
+              borderRadius: radius.lg,
+              padding: spacing.lg,
+              gap: spacing.md,
+            }}
+          >
+            <View style={{ ...ROW, gap: 10 }}>
+              <MaterialCommunityIcons name="cloud-off-outline" size={26} color={colors.danger} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 15, fontWeight: "800" }]}>
+                  {t("searchErrorTitle")}
+                </Text>
+                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, lineHeight: 18 }]}>
+                  {t("searchErrorSubtitle")}
+                </Text>
+              </View>
+            </View>
+            <Button title={t("retry")} icon="refresh" onPress={onRefresh} />
+          </View>
+        </ScrollView>
       ) : (
         <FlatList
           data={results}
@@ -471,14 +518,15 @@ export default function SearchScreen() {
             ) : null
           }
           ListEmptyComponent={
-            error ? (
-              <View style={{ gap: spacing.md }}>
-                <EmptyState icon="alert-circle-outline" title={t("error")} />
-                <Button title={t("retry")} variant="outline" onPress={onRefresh} />
-              </View>
-            ) : (
-              <EmptyState icon="magnify" title={t("noResults")} subtitle={t("searchEmptySubtitle")} />
-            )
+            /* (b) the query succeeded but matched nothing */
+            <View style={{ flex: 1, justifyContent: "center", gap: spacing.md }}>
+              <EmptyState
+                icon="magnify-close"
+                title={searched ? t("searchNoResultsTitle") : t("noResults")}
+                subtitle={t("searchEmptySubtitle")}
+              />
+              <Button title={t("searchClearFilters")} variant="outline" onPress={clearFilters} />
+            </View>
           }
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} colors={[colors.brand]} />
