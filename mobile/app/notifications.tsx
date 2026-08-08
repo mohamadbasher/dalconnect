@@ -8,6 +8,7 @@ import { useTheme, radius, spacing } from "../lib/theme";
 import { useI18n } from "../lib/i18n";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import { channelTopic } from "../lib/realtime";
 import { formatTime } from "../lib/format";
 import { ROW, RTL_TEXT } from "../lib/rtl";
 import { EmptyState, Loading } from "../components/ui";
@@ -59,7 +60,7 @@ export default function NotificationsScreen() {
   useEffect(() => {
     if (!uid) return;
     const channel = supabase
-      .channel("notifications-screen")
+      .channel(channelTopic("notifications-screen"))
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${uid}` },

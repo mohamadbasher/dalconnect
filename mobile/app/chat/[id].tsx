@@ -23,6 +23,7 @@ import * as ImagePicker from "expo-image-picker";
 import MapView, { Marker } from "react-native-maps";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "../../lib/supabase";
+import { channelTopic } from "../../lib/realtime";
 import { useTheme, radius, spacing } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
@@ -180,7 +181,7 @@ export default function ChatThread() {
   useEffect(() => {
     if (!convoId || !uid) return;
     const channel = supabase
-      .channel(`chat-${convoId}`)
+      .channel(channelTopic(`chat-${convoId}`))
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${convoId}` },

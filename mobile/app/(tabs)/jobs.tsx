@@ -6,6 +6,7 @@ import { useTheme, radius, spacing } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
+import { channelTopic } from "../../lib/realtime";
 import { ROW } from "../../lib/rtl";
 import { BookingCard } from "../../components/BookingCard";
 import { Button, EmptyState, SkeletonList } from "../../components/ui";
@@ -53,7 +54,7 @@ export default function JobsScreen() {
   useEffect(() => {
     if (!uid) return;
     const channel = supabase
-      .channel(`pro-jobs-${uid}`)
+      .channel(channelTopic(`pro-jobs-${uid}`))
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "bookings", filter: `professional_id=eq.${uid}` },

@@ -22,6 +22,7 @@ import { useTheme, radius, spacing, formatPrice } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
+import { channelTopic } from "../../lib/realtime";
 import { getOrCreateConversation } from "../../lib/chat";
 import { callPhone, fetchContactPhone, openWhatsApp } from "../../lib/contact";
 import { formatDateTime, STATUS_KEY, STATUS_TONE } from "../../lib/format";
@@ -87,7 +88,7 @@ export default function JobScreen() {
   useEffect(() => {
     if (!id) return;
     const channel = supabase
-      .channel(`job-${id}`)
+      .channel(channelTopic(`job-${id}`))
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "bookings", filter: `id=eq.${id}` },

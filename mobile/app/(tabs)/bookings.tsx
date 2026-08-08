@@ -7,6 +7,7 @@ import { useTheme, radius, spacing } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
+import { channelTopic } from "../../lib/realtime";
 import { ROW } from "../../lib/rtl";
 import { BookingCard } from "../../components/BookingCard";
 import { Button, EmptyState, Skeleton, SkeletonList } from "../../components/ui";
@@ -109,7 +110,7 @@ export default function BookingsTab() {
   useEffect(() => {
     if (!uid) return;
     const channel = supabase
-      .channel(`bookings-tab-${uid}`)
+      .channel(channelTopic(`bookings-tab-${uid}`))
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "bookings", filter: `customer_id=eq.${uid}` },

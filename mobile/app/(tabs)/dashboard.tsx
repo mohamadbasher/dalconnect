@@ -21,6 +21,7 @@ import { useTheme, radius, spacing, formatPrice } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
+import { channelTopic } from "../../lib/realtime";
 import { formatDateTime, formatTime } from "../../lib/format";
 import { todayHoursLabel } from "../../lib/hours";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
@@ -166,7 +167,7 @@ export default function DashboardScreen() {
   useEffect(() => {
     if (!uid) return;
     const channel = supabase
-      .channel(`pro-dashboard-${uid}`)
+      .channel(channelTopic(`pro-dashboard-${uid}`))
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "bookings" }, () => load())
       .on(
         "postgres_changes",

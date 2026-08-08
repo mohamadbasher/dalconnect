@@ -1,47 +1,22 @@
 // Dal-style top bar: brand-colored, rounded bottom corners, bell + title + menu.
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useTheme } from "../lib/theme";
-import { useAuth } from "../context/AuthContext";
-import { supabase } from "../lib/supabase";
+import { useNotifications } from "../context/NotificationsContext";
 import { ROW } from "../lib/rtl";
 import { SideMenu } from "./SideMenu";
 
 export function TopBar() {
   const { colors, shadows } = useTheme();
-  const { session } = useAuth();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [unread, setUnread] = useState(0);
+  // One shared subscription lives in the provider — this bar is mounted once
+  // per tab screen, so it must never own a channel of its own.
+  const { unread } = useNotifications();
   const [menuOpen, setMenuOpen] = useState(false);
-
-  useEffect(() => {
-    if (!session?.user) return;
-    let active = true;
-    const load = () =>
-      supabase
-        .from("notifications")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", session.user.id)
-        .eq("is_read", false)
-        .then(({ count }) => active && setUnread(count ?? 0));
-    load();
-    const channel = supabase
-      .channel("topbar-notifications")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${session.user.id}` },
-        () => load()
-      )
-      .subscribe();
-    return () => {
-      active = false;
-      supabase.removeChannel(channel);
-    };
-  }, [session?.user?.id]);
 
   return (
     <View

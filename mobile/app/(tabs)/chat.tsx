@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { supabase } from "../../lib/supabase";
+import { channelTopic } from "../../lib/realtime";
 import { useTheme, radius, spacing } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
@@ -87,7 +88,7 @@ export default function ChatTab() {
   useEffect(() => {
     if (!uid) return;
     const channel = supabase
-      .channel("conversations-list")
+      .channel(channelTopic("conversations-list"))
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "conversations" },

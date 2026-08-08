@@ -26,6 +26,7 @@ import { useTheme, radius, spacing, formatPrice } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
+import { channelTopic } from "../../lib/realtime";
 import { getOrCreateConversation } from "../../lib/chat";
 import { callPhone, fetchContactPhone, openWhatsApp } from "../../lib/contact";
 import { formatDateTime, STATUS_KEY } from "../../lib/format";
@@ -175,7 +176,7 @@ export default function BookingDetail() {
   useEffect(() => {
     if (!id) return;
     const channel = supabase
-      .channel(`booking-detail-${id}`)
+      .channel(channelTopic(`booking-detail-${id}`))
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "bookings", filter: `id=eq.${id}` },

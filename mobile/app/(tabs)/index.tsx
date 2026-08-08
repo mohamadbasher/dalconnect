@@ -16,6 +16,7 @@ import { useRouter } from "expo-router";
 import { Image } from "expo-image";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { supabase } from "../../lib/supabase";
+import { channelTopic } from "../../lib/realtime";
 import { useTheme, radius, spacing } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
@@ -191,7 +192,7 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!uid) return;
     const channel = supabase
-      .channel(`home-active-${uid}`)
+      .channel(channelTopic(`home-active-${uid}`))
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "bookings", filter: `customer_id=eq.${uid}` },

@@ -31,7 +31,8 @@ function safeIcon(icon?: string | null): keyof typeof MaterialCommunityIcons.gly
 }
 
 // ---------- bottom-sheet picker (city / category / sort) ----------
-// Kept as a shared export: other screens (e.g. /category/[id]) mount it.
+// Generic bottom-sheet picker. Currently unmounted anywhere (the pro directory
+// it used to filter is gone) — kept as a shared export for future pickers.
 export function PickerSheet({
   visible,
   title,

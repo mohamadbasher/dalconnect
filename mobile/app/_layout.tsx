@@ -26,6 +26,7 @@ import { applyGlobalFont } from "../lib/font";
 import { ensureLtrBase } from "../lib/rtl";
 import { Loading } from "../components/ui";
 import { ToastProvider } from "../components/Toast";
+import { NotificationsProvider } from "../context/NotificationsContext";
 import { BrandSplash } from "../components/BrandSplash";
 
 // Deterministic LTR base; screens lay out RTL explicitly.
@@ -96,9 +97,11 @@ export default function RootLayout() {
       <ThemeProvider>
         <I18nProvider>
           <AuthProvider>
-            <ToastProvider>
-              <Root />
-            </ToastProvider>
+            <NotificationsProvider>
+              <ToastProvider>
+                <Root />
+              </ToastProvider>
+            </NotificationsProvider>
           </AuthProvider>
         </I18nProvider>
       </ThemeProvider>
