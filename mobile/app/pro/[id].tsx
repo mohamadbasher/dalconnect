@@ -1,16 +1,19 @@
-// Public professional profile — hero, actions (book/message/favorite/report),
-// working hours, gallery with fullscreen viewer, reviews.
+// Public professional profile — the page a customer reads before accepting that
+// pro's quote. Trust first: hero (photo, name, verified, rating, jobs), then bio,
+// hours, gallery, reviews. No direct booking and no phone number here: customers
+// choose a quote, and the number is released only by `get_contact_phone` once the
+// offer is accepted.
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Linking,
   Modal,
   Pressable,
   RefreshControl,
   ScrollView,
   Share,
   Text,
+  TextStyle,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -26,24 +29,14 @@ import { getOrCreateConversation } from "../../lib/chat";
 import { formatTime } from "../../lib/format";
 import { hasWorkingHours, isOpenNow, todayHoursLabel } from "../../lib/hours";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
-import { Avatar, Badge, Button, Card, EmptyState, Loading, SectionHeader, StarRating } from "../../components/ui";
-import { useToast } from "../../components/Toast";
+import { Avatar, Button, Card, EmptyState, Loading, SectionHeader, StarRating } from "../../components/ui";
 import type { GalleryItem, ProCard as ProCardType, Review } from "../../lib/types";
 
 const PRO_SELECT =
   "*, profile:profiles!professionals_id_fkey(*), professional_categories(category:categories(*)), city:cities(*)";
 
-/**
- * Israeli numbers for WhatsApp: digits only, international form without "+".
- * "052-123-4567" → "972521234567", "+972 52 …" / "00972…" pass through.
- */
-function waDigits(phone: string): string {
-  let d = phone.replace(/\D/g, "");
-  if (d.startsWith("00")) d = d.slice(2);
-  if (d.startsWith("972")) return d;
-  if (d.startsWith("0")) return `972${d.slice(1)}`;
-  return `972${d}`;
-}
+/** Clock times and counts are Latin digits — keep them LTR inside the RTL layout. */
+const LTR: TextStyle = { writingDirection: "ltr" };
 
 function mapPro(row: any): ProCardType {
   return {
@@ -116,6 +109,7 @@ function GalleryViewer({
           style={{
             position: "absolute",
             top: insets.top + 10,
+            // RTL: close sits on the start (right) edge
             right: 16,
             width: 40,
             height: 40,
@@ -136,7 +130,6 @@ export default function ProProfileScreen() {
   const { colors, shadows } = useTheme();
   const { t, lang, loc } = useI18n();
   const { session, loading: authLoading } = useAuth();
-  const toast = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -205,36 +198,6 @@ export default function ProProfileScreen() {
   };
 
   const name = pro ? pro.business_name || pro.profile?.full_name || "" : "";
-  const phone = (pro?.profile?.phone ?? "").trim();
-
-  const callPro = useCallback(async () => {
-    if (!phone) return;
-    try {
-      await Linking.openURL(`tel:${phone.replace(/\s/g, "")}`);
-    } catch {
-      toast.error(t("proCallFailed"));
-    }
-  }, [phone, toast, t]);
-
-  // Prefer the installed app; fall back to the wa.me web hand-off.
-  const openWhatsApp = useCallback(async () => {
-    if (!phone) return;
-    const digits = waDigits(phone);
-    const appUrl = `whatsapp://send?phone=${digits}`;
-    try {
-      if (await Linking.canOpenURL(appUrl)) {
-        await Linking.openURL(appUrl);
-        return;
-      }
-    } catch {
-      // canOpenURL can throw when the scheme isn't declared — fall through
-    }
-    try {
-      await Linking.openURL(`https://wa.me/${digits}`);
-    } catch {
-      toast.error(t("proWhatsappFailed"));
-    }
-  }, [phone, toast, t]);
 
   const sharePro = useCallback(async () => {
     if (!pro) return;
@@ -257,7 +220,6 @@ export default function ProProfileScreen() {
   if (!session) return <Redirect href="/(auth)/welcome" />;
   if (loading) return <Loading />;
 
-  const firstCatId = pro?.categories?.[0]?.id;
   const wh = pro?.working_hours ?? {};
   const hasHours = Object.keys(wh).length > 0;
   const banned = !!pro?.profile?.is_banned;
@@ -265,6 +227,7 @@ export default function ProProfileScreen() {
   const showStatus = hasWorkingHours(wh);
   const openNow = showStatus && isOpenNow(wh);
   const todayLabel = todayHoursLabel(wh, lang);
+  const today = new Date().getDay();
 
   const header = (
     <View
@@ -276,18 +239,20 @@ export default function ProProfileScreen() {
         gap: 12,
       }}
     >
+      {/* RTL: back points to the right */}
       <Pressable
         onPress={() => router.back()}
         hitSlop={8}
-        style={{
+        style={({ pressed }) => ({
           width: 40,
           height: 40,
-          borderRadius: 20,
+          borderRadius: radius.full,
           backgroundColor: colors.card,
           alignItems: "center",
           justifyContent: "center",
+          opacity: pressed ? 0.8 : 1,
           ...shadows.card,
-        }}
+        })}
       >
         <Ionicons name="arrow-forward" size={20} color={colors.text} />
       </Pressable>
@@ -315,116 +280,68 @@ export default function ProProfileScreen() {
     );
   }
 
-  const iconAction = (
+  /** One of the three trust numbers under the hero. */
+  const stat = (
+    value: string,
+    label: string,
+    /** RTL: tiles run right-to-left, so every tile but the last carries the divider on its LEFT edge */
+    divider: boolean,
+    icon?: keyof typeof MaterialCommunityIcons.glyphMap
+  ) => (
+    <View
+      key={label}
+      style={{
+        flex: 1,
+        alignItems: "center",
+        gap: 3,
+        paddingVertical: spacing.md,
+        borderLeftWidth: divider ? 1 : 0,
+        borderLeftColor: colors.hairline,
+      }}
+    >
+      <View style={{ ...ROW, gap: 4 }}>
+        {icon ? <MaterialCommunityIcons name={icon} size={14} color={colors.gold} /> : null}
+        <Text style={[LTR, { color: colors.text, fontSize: 16, fontWeight: "800" }]}>{value}</Text>
+      </View>
+      <Text numberOfLines={1} style={{ color: colors.muted, fontSize: 11.5, fontWeight: "600" }}>
+        {label}
+      </Text>
+    </View>
+  );
+
+  /** Quiet secondary action — a bordered pill, never competing with the content. */
+  const quietAction = (
+    key: string,
     icon: keyof typeof Ionicons.glyphMap,
     label: string,
-    color: string,
     onPress: () => void,
     busy?: boolean
   ) => (
     <Pressable
+      key={key}
       onPress={onPress}
       disabled={busy}
-      style={({ pressed }) => [
-        {
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 4,
-          paddingVertical: 10,
-          borderRadius: radius.md,
-          backgroundColor: colors.card,
-          borderWidth: 1,
-          borderColor: colors.border,
-          opacity: busy ? 0.6 : 1,
-          transform: [{ scale: pressed ? 0.96 : 1 }],
-        },
-      ]}
+      style={({ pressed }) => ({
+        ...ROW,
+        flex: 1,
+        justifyContent: "center",
+        gap: 6,
+        paddingVertical: 11,
+        borderRadius: radius.full,
+        backgroundColor: colors.card,
+        opacity: busy ? 0.6 : pressed ? 0.85 : 1,
+        ...shadows.card,
+      })}
     >
       {busy ? (
-        <ActivityIndicator size="small" color={color} />
+        <ActivityIndicator size="small" color={colors.brand} />
       ) : (
-        <Ionicons name={icon} size={20} color={color} />
+        <Ionicons name={icon} size={17} color={colors.brand} />
       )}
-      <Text numberOfLines={1} style={{ color, fontSize: 11.5, fontWeight: "700" }}>
+      <Text numberOfLines={1} style={{ color: colors.text, fontSize: 12.5, fontWeight: "700" }}>
         {label}
       </Text>
     </Pressable>
-  );
-
-  type ProAction = {
-    key: string;
-    icon: keyof typeof Ionicons.glyphMap;
-    label: string;
-    color: string;
-    onPress: () => void;
-    busy?: boolean;
-  };
-
-  // Call + WhatsApp only exist when we actually have a number to dial.
-  const actions: ProAction[] = [
-    ...(phone
-      ? ([
-          { key: "call", icon: "call-outline", label: t("call"), color: colors.brand, onPress: callPro },
-          {
-            key: "whatsapp",
-            icon: "logo-whatsapp",
-            label: t("proWhatsapp"),
-            color: colors.success,
-            onPress: openWhatsApp,
-          },
-        ] as ProAction[])
-      : []),
-    {
-      key: "message",
-      icon: "chatbubble-ellipses-outline",
-      label: t("message"),
-      color: colors.text,
-      onPress: openChat,
-      busy: chatLoading,
-    },
-    { key: "share", icon: "share-social-outline", label: t("share"), color: colors.text, onPress: sharePro },
-    {
-      key: "report",
-      icon: "flag-outline",
-      label: t("report"),
-      color: colors.text,
-      onPress: () => router.push(`/report?userId=${pro.id}`),
-    },
-  ];
-
-  // three per row; pad the tail with spacers so tile widths stay consistent
-  const actionRows: (ProAction | null)[][] = [];
-  for (let i = 0; i < actions.length; i += 3) {
-    const row: (ProAction | null)[] = actions.slice(i, i + 3);
-    while (row.length < 3) row.push(null);
-    actionRows.push(row);
-  }
-
-  const statChip = (
-    icon: keyof typeof MaterialCommunityIcons.glyphMap,
-    value: string,
-    label: string
-  ) => (
-    <View
-      style={{
-        flex: 1,
-        alignItems: "center",
-        gap: 2,
-        backgroundColor: colors.chip,
-        borderRadius: radius.md,
-        paddingVertical: 10,
-        paddingHorizontal: 4,
-      }}
-    >
-      <View style={{ ...ROW, gap: 4 }}>
-        <MaterialCommunityIcons name={icon} size={14} color={colors.brand} />
-        <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: "800" }}>{value}</Text>
-      </View>
-      <Text numberOfLines={1} style={{ color: colors.muted, fontSize: 10.5, fontWeight: "600" }}>
-        {label}
-      </Text>
-    </View>
   );
 
   return (
@@ -442,107 +359,106 @@ export default function ProProfileScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* ---- hero ---- */}
-        <Card style={{ alignItems: "center", gap: spacing.sm }}>
-          <Avatar uri={pro.profile?.avatar_url} name={name} size={72} />
-          <View style={{ ...ROW, gap: 6 }}>
-            <Text style={[RTL_TEXT, { color: colors.text, fontSize: 19, fontWeight: "800" }]}>{name}</Text>
-            {pro.verification_status === "approved" ? (
-              <MaterialCommunityIcons name="check-decagram" size={19} color={colors.info} />
-            ) : null}
-          </View>
-          {pro.categories?.length ? (
-            <View style={{ flexDirection: "row-reverse", flexWrap: "wrap", justifyContent: "center", gap: 6 }}>
-              {pro.categories.map((c) => (
-                <View
-                  key={c.id}
-                  style={{
-                    backgroundColor: colors.brandTint,
-                    borderRadius: radius.full,
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                  }}
-                >
-                  <Text style={{ color: colors.brand, fontSize: 12, fontWeight: "700" }}>
-                    {loc(c, "name")}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-          <View style={{ ...ROW, gap: 10 }}>
-            {pro.city ? (
-              <View style={{ ...ROW, gap: 4 }}>
-                <Ionicons name="location-outline" size={14} color={colors.muted} />
-                <Text style={{ color: colors.muted, fontSize: 12.5, fontWeight: "600" }}>
-                  {loc(pro.city, "name")}
-                </Text>
-              </View>
-            ) : null}
-            <Badge
-              label={pro.is_available ? t("available") : t("unavailable")}
-              tone={pro.is_available ? "success" : "neutral"}
-            />
-          </View>
-          {/* open/closed right now, from working_hours (ui.tsx has no StatusPill yet) */}
-          {showStatus ? (
-            <View
-              style={{
-                ...ROW,
-                gap: 6,
-                backgroundColor: openNow ? colors.successTint : colors.dangerTint,
-                borderRadius: radius.full,
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-              }}
-            >
-              <View
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: radius.full,
-                  backgroundColor: openNow ? colors.success : colors.danger,
-                }}
-              />
-              <Text style={{ color: openNow ? colors.success : colors.danger, fontSize: 12.5, fontWeight: "700" }}>
-                {openNow ? t("proOpenNow") : t("proClosedNow")}
-              </Text>
-              {todayLabel ? (
-                <Text style={{ color: colors.muted, fontSize: 12.5 }}>· {todayLabel}</Text>
+        {/* ---------- hero ---------- */}
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          <View style={{ alignItems: "center", gap: spacing.sm, padding: spacing.lg }}>
+            <Avatar uri={pro.profile?.avatar_url} name={name} size={80} />
+
+            <View style={{ ...ROW, gap: 6 }}>
+              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 19, fontWeight: "800" }]}>{name}</Text>
+              {pro.verification_status === "approved" ? (
+                <MaterialCommunityIcons name="check-decagram" size={19} color={colors.info} />
               ) : null}
             </View>
-          ) : null}
-          {/* stat chips: rating avg / reviews / jobs completed */}
-          <View style={{ ...ROW, gap: 8, alignSelf: "stretch", marginTop: 4 }}>
-            {statChip(
-              "star",
+
+            {pro.categories?.length ? (
+              <View style={{ ...ROW, flexWrap: "wrap", justifyContent: "center", gap: 6 }}>
+                {pro.categories.map((c) => (
+                  <View
+                    key={c.id}
+                    style={{
+                      backgroundColor: colors.brandTint,
+                      borderRadius: radius.full,
+                      paddingHorizontal: 12,
+                      paddingVertical: 5,
+                    }}
+                  >
+                    <Text style={{ color: colors.brand, fontSize: 12, fontWeight: "700" }}>{loc(c, "name")}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {/* where they work + whether they're open right now */}
+            <View style={{ ...ROW, gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+              {pro.city ? (
+                <View style={{ ...ROW, gap: 4 }}>
+                  <Ionicons name="location-outline" size={14} color={colors.muted} />
+                  <Text style={{ color: colors.muted, fontSize: 12.5, fontWeight: "600" }}>
+                    {loc(pro.city, "name")}
+                  </Text>
+                </View>
+              ) : null}
+              {showStatus ? (
+                <View style={{ ...ROW, gap: 6 }}>
+                  <View
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: radius.full,
+                      backgroundColor: openNow ? colors.success : colors.faint,
+                    }}
+                  />
+                  <Text
+                    style={{
+                      color: openNow ? colors.success : colors.muted,
+                      fontSize: 12.5,
+                      fontWeight: "700",
+                    }}
+                  >
+                    {openNow ? t("proOpenNow") : t("proClosedNow")}
+                  </Text>
+                  {/* "اليوم 09:00 – 21:00" mixes Arabic with clock times — RTL text, LTR digit runs */}
+                  {todayLabel ? (
+                    <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12.5 }]}>{todayLabel}</Text>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          </View>
+
+          {/* the three numbers a customer weighs a quote by */}
+          <View style={{ ...ROW, borderTopWidth: 1, borderTopColor: colors.hairline }}>
+            {stat(
               pro.rating_count > 0 ? Number(pro.rating_avg).toFixed(1) : "—",
-              t("rating")
+              t("rating"),
+              true,
+              "star"
             )}
-            {statChip("star-box-multiple-outline", String(pro.rating_count), t("reviews"))}
-            {statChip("briefcase-check-outline", String(pro.jobs_completed), t("jobsCompleted"))}
+            {stat(String(pro.rating_count), t("reviews"), true)}
+            {stat(String(pro.jobs_completed), t("jobsCompleted"), false)}
           </View>
         </Card>
 
-        {/* ---- actions / own-profile hint ---- */}
+        {/* ---------- own profile hint / quiet actions ---------- */}
         {isOwn ? (
           <Card style={{ ...ROW, gap: 10 }}>
             <MaterialCommunityIcons name="information-outline" size={20} color={colors.brand} />
-            <Text style={[RTL_TEXT, { flex: 1, color: colors.muted, fontSize: 13 }]}>
+            <Text style={[RTL_TEXT, { flex: 1, color: colors.muted, fontSize: 13, lineHeight: 19 }]}>
               {t("proOwnProfileHint")}
             </Text>
           </Card>
         ) : (
-          <View style={{ gap: spacing.sm }}>
+          <View style={{ gap: spacing.md }}>
             {!pro.is_available ? (
               <View
                 style={{
                   ...ROW,
                   gap: 10,
+                  alignItems: "flex-start",
                   backgroundColor: colors.chip,
                   borderRadius: radius.md,
-                  paddingHorizontal: spacing.md,
-                  paddingVertical: spacing.sm + 2,
+                  padding: spacing.md,
                 }}
               >
                 <Ionicons name="moon-outline" size={17} color={colors.muted} />
@@ -551,33 +467,17 @@ export default function ProProfileScreen() {
                 </Text>
               </View>
             ) : null}
-            {actionRows.map((row, i) => (
-              <View key={`actions-${i}`} style={{ ...ROW, gap: 10 }}>
-                {row.map((a, j) =>
-                  a ? (
-                    <React.Fragment key={a.key}>
-                      {iconAction(a.icon, a.label, a.color, a.onPress, a.busy)}
-                    </React.Fragment>
-                  ) : (
-                    // keeps the last row's tiles the same width as the row above
-                    <View key={`spacer-${i}-${j}`} style={{ flex: 1 }} />
-                  )
-                )}
-              </View>
-            ))}
-            <Button
-              title={t("proBookNow")}
-              icon="calendar-check"
-              onPress={() =>
-                router.push(
-                  `/create-booking?proId=${pro.id}${firstCatId != null ? `&categoryId=${firstCatId}` : ""}`
-                )
-              }
-            />
+            <View style={{ ...ROW, gap: 10 }}>
+              {quietAction("message", "chatbubble-ellipses-outline", t("message"), openChat, chatLoading)}
+              {quietAction("share", "share-social-outline", t("share"), sharePro)}
+              {quietAction("report", "flag-outline", t("report"), () =>
+                router.push(`/report?userId=${pro.id}`)
+              )}
+            </View>
           </View>
         )}
 
-        {/* ---- bio ---- */}
+        {/* ---------- bio ---------- */}
         {pro.bio ? (
           <View>
             <SectionHeader title={t("proAbout")} />
@@ -587,30 +487,45 @@ export default function ProProfileScreen() {
           </View>
         ) : null}
 
-        {/* ---- working hours (Sunday first, keys "0".."6") ---- */}
+        {/* ---------- working hours (Sunday first, keys "0".."6") ---------- */}
         {hasHours ? (
           <View>
             <SectionHeader title={t("proWorkingHours")} />
-            <Card style={{ gap: 0, paddingVertical: spacing.sm }}>
+            <Card style={{ paddingVertical: spacing.sm }}>
               {[0, 1, 2, 3, 4, 5, 6].map((d, i) => {
                 const h = wh[String(d)];
+                const isToday = d === today;
                 return (
                   <View
                     key={d}
                     style={{
                       ...ROW,
                       justifyContent: "space-between",
-                      paddingVertical: 8,
+                      paddingVertical: 9,
                       borderBottomWidth: i < 6 ? 1 : 0,
-                      borderBottomColor: colors.border,
+                      borderBottomColor: colors.hairline,
                     }}
                   >
-                    <Text style={[RTL_TEXT, { color: colors.text, fontSize: 13.5, fontWeight: "600" }]}>
+                    <Text
+                      style={[
+                        RTL_TEXT,
+                        {
+                          color: isToday ? colors.brand : colors.text,
+                          fontSize: 13.5,
+                          fontWeight: isToday ? "800" : "600",
+                        },
+                      ]}
+                    >
                       {t(`proDay${d}`)}
                     </Text>
                     {h ? (
-                      <Text style={{ color: colors.muted, fontSize: 13 }}>
-                        {h.from} – {h.to}
+                      <Text
+                        style={[
+                          LTR,
+                          { color: isToday ? colors.brand : colors.muted, fontSize: 13, fontWeight: isToday ? "700" : "400" },
+                        ]}
+                      >
+                        {`${h.from} – ${h.to}`}
                       </Text>
                     ) : (
                       <Text style={{ color: colors.faint, fontSize: 13 }}>{t("proClosed")}</Text>
@@ -622,7 +537,7 @@ export default function ProProfileScreen() {
           </View>
         ) : null}
 
-        {/* ---- gallery ---- */}
+        {/* ---------- gallery (inverted: the strip starts from the right) ---------- */}
         {gallery.length > 0 ? (
           <View>
             <SectionHeader title={t("proGallery")} />
@@ -640,7 +555,7 @@ export default function ProProfileScreen() {
                 >
                   <Image
                     source={{ uri: item.image_url }}
-                    style={{ width: 110, height: 110, borderRadius: radius.md, backgroundColor: colors.chip }}
+                    style={{ width: 116, height: 116, borderRadius: radius.md, backgroundColor: colors.chip }}
                     contentFit="cover"
                     transition={150}
                   />
@@ -650,16 +565,15 @@ export default function ProProfileScreen() {
           </View>
         ) : null}
 
-        {/* ---- reviews ---- */}
+        {/* ---------- reviews ---------- */}
         <View>
           <SectionHeader title={t("reviews")} />
           <Card style={{ gap: spacing.md }}>
-            {/* breakdown line */}
             <View style={{ ...ROW, gap: 12 }}>
-              <Text style={{ color: colors.text, fontSize: 34, fontWeight: "800" }}>
+              <Text style={[LTR, { color: colors.text, fontSize: 34, fontWeight: "800" }]}>
                 {pro.rating_count > 0 ? Number(pro.rating_avg).toFixed(1) : "—"}
               </Text>
-              <View style={{ gap: 2 }}>
+              <View style={{ gap: 3, alignItems: "flex-end" }}>
                 <StarRating rating={Number(pro.rating_avg)} size={15} />
                 <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12 }]}>
                   {t("proReviewsCount", { count: pro.rating_count })}
@@ -679,14 +593,14 @@ export default function ProProfileScreen() {
                     style={{
                       ...ROW,
                       gap: 10,
-                      paddingTop: spacing.sm,
-                      borderTopWidth: i === 0 ? 1 : 0.5,
-                      borderTopColor: colors.border,
+                      paddingTop: spacing.md,
+                      borderTopWidth: 1,
+                      borderTopColor: colors.hairline,
                     }}
                   >
                     <Avatar uri={r.customer?.avatar_url} name={custName} size={36} />
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <View style={{ ...ROW, justifyContent: "space-between" }}>
+                    <View style={{ flex: 1, gap: 3 }}>
+                      <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
                         <Text style={[RTL_TEXT, { color: colors.text, fontSize: 13.5, fontWeight: "700" }]}>
                           {custName}
                         </Text>

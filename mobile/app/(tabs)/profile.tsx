@@ -1,6 +1,6 @@
-// Profile tab — account hero, become-pro promo, settings menu, sign out, delete account.
+// Profile tab — brand hero, become-pro promo, quiet grouped rows, sign out, delete account.
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, TextStyle, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Constants from "expo-constants";
@@ -9,9 +9,13 @@ import { useI18n, LANG_NAMES } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
-import { Avatar, Badge, Button, Card, Chip, Loading, SectionHeader } from "../../components/ui";
+import { Avatar, Button, Card, Loading, SectionHeader } from "../../components/ui";
 import type { Lang } from "../../lib/types";
 
+/** Phone numbers are Latin digits — pin them LTR inside the RTL layout. */
+const LTR: TextStyle = { writingDirection: "ltr", textAlign: "right" };
+
+/** A quiet settings row: icon disc, label, optional trailing control, chevron. */
 function MenuRow({
   icon,
   label,
@@ -36,34 +40,99 @@ function MenuRow({
       style={({ pressed }) => ({
         ...ROW,
         gap: spacing.md,
-        paddingVertical: 14,
+        paddingVertical: 13,
         paddingHorizontal: spacing.lg,
-        opacity: pressed ? 0.7 : 1,
-        transform: [{ scale: pressed ? 0.98 : 1 }],
+        opacity: pressed && onPress ? 0.7 : 1,
       })}
     >
       <View
         style={{
-          width: 36,
-          height: 36,
-          borderRadius: 12,
+          width: 34,
+          height: 34,
+          borderRadius: radius.md,
           backgroundColor: danger ? colors.dangerTint : colors.brandTint,
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <Ionicons name={icon} size={18} color={danger ? colors.danger : colors.brand} />
+        <Ionicons name={icon} size={17} color={danger ? colors.danger : colors.brand} />
       </View>
       <Text style={[RTL_TEXT, { flex: 1, color: fg, fontSize: 15, fontWeight: "600" }]}>{label}</Text>
       {children}
-      {onPress && !hideChevron ? <Ionicons name="chevron-back" size={18} color={colors.faint} /> : null}
+      {/* RTL: "back" points right, which is forward in this layout */}
+      {onPress && !hideChevron ? <Ionicons name="chevron-back" size={17} color={colors.faint} /> : null}
     </Pressable>
   );
 }
 
+/** Hairline between rows, inset past the icon disc so it starts under the label. */
 function Divider() {
   const { colors } = useTheme();
-  return <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: spacing.lg }} />;
+  return (
+    <View
+      style={{
+        height: 1,
+        backgroundColor: colors.hairline,
+        marginRight: spacing.lg + 34 + spacing.md,
+        marginLeft: spacing.lg,
+      }}
+    />
+  );
+}
+
+/** Compact segmented pill — the calm way to show a two/three-way choice in a row. */
+function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { key: T; label?: string; icon?: keyof typeof Ionicons.glyphMap; a11y?: string }[];
+  value: T;
+  onChange: (k: T) => void;
+}) {
+  const { colors, shadows } = useTheme();
+  return (
+    <View
+      style={{
+        ...ROW,
+        gap: 2,
+        backgroundColor: colors.chip,
+        borderRadius: radius.full,
+        padding: 3,
+      }}
+    >
+      {options.map((o) => {
+        const on = o.key === value;
+        return (
+          <Pressable
+            key={o.key}
+            onPress={() => onChange(o.key)}
+            accessibilityRole="button"
+            accessibilityLabel={o.a11y ?? o.label}
+            accessibilityState={{ selected: on }}
+            style={{
+              ...ROW,
+              gap: 5,
+              paddingHorizontal: o.label ? 12 : 10,
+              paddingVertical: 6,
+              borderRadius: radius.full,
+              backgroundColor: on ? colors.card : "transparent",
+              ...(on ? shadows.card : null),
+            }}
+          >
+            {o.icon ? (
+              <Ionicons name={o.icon} size={15} color={on ? colors.brand : colors.muted} />
+            ) : null}
+            {o.label ? (
+              <Text style={{ color: on ? colors.brand : colors.muted, fontSize: 12.5, fontWeight: "700" }}>
+                {o.label}
+              </Text>
+            ) : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 }
 
 export default function ProfileScreen() {
@@ -125,71 +194,137 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const themeChips: { key: "light" | "dark" | "system"; label: string }[] = [
-    { key: "light", label: t("lightMode") },
-    { key: "dark", label: t("darkMode") },
-    { key: "system", label: t("systemMode") },
-  ];
+  const group: (children: React.ReactNode) => React.ReactNode = (children) => (
+    <View
+      style={{
+        backgroundColor: colors.card,
+        borderRadius: radius.lg,
+        paddingVertical: spacing.xs,
+        ...shadows.card,
+      }}
+    >
+      {children}
+    </View>
+  );
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.bg }}
       contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl }}
+      showsVerticalScrollIndicator={false}
     >
-      {/* ---------- hero ---------- */}
-      <Card>
-        <View style={{ ...ROW, gap: spacing.lg }}>
+      {/* ---------- brand hero ---------- */}
+      <View
+        style={{
+          backgroundColor: colors.brand,
+          borderRadius: radius.xl,
+          padding: spacing.lg,
+          gap: spacing.lg,
+          overflow: "hidden",
+        }}
+      >
+        {/* soft decorative discs (brand surface, so they're drawn in onBrand) */}
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: -70,
+            left: -40,
+            width: 170,
+            height: 170,
+            borderRadius: radius.full,
+            backgroundColor: colors.onBrand,
+            opacity: 0.1,
+          }}
+        />
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            bottom: -55,
+            left: 60,
+            width: 110,
+            height: 110,
+            borderRadius: radius.full,
+            backgroundColor: colors.onBrand,
+            opacity: 0.08,
+          }}
+        />
+
+        <View style={{ ...ROW, gap: spacing.md }}>
           <Pressable onPress={() => router.push("/edit-profile")} hitSlop={6}>
-            {/* brandTint ring makes the avatar feel premium */}
             <View
               style={{
                 padding: 3,
                 borderRadius: radius.full,
-                borderWidth: 3,
-                borderColor: colors.brandTint,
+                borderWidth: 2,
+                borderColor: colors.onBrand,
               }}
             >
-              <Avatar uri={profile.avatar_url} name={profile.full_name} size={68} />
-            </View>
-            {/* edit pencil badge */}
-            <View
-              style={{
-                position: "absolute",
-                bottom: 0,
-                left: 0,
-                width: 26,
-                height: 26,
-                borderRadius: 13,
-                backgroundColor: colors.brand,
-                borderWidth: 2.5,
-                borderColor: colors.card,
-                alignItems: "center",
-                justifyContent: "center",
-                ...shadows.card,
-              }}
-            >
-              <Ionicons name="pencil" size={12} color={colors.onBrand} />
+              <Avatar uri={profile.avatar_url} name={profile.full_name} size={64} />
             </View>
           </Pressable>
-          <View style={{ flex: 1, gap: 5 }}>
-            <Text style={[RTL_TEXT, { color: colors.text, fontSize: 18, fontWeight: "800" }]} numberOfLines={1}>
+
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text
+              numberOfLines={1}
+              style={[RTL_TEXT, { color: colors.onBrand, fontSize: 20, fontWeight: "800" }]}
+            >
               {profile.full_name}
             </Text>
-            <Text style={{ color: colors.muted, fontSize: 13.5, textAlign: "right", writingDirection: "ltr" }}>
+            <Text style={[LTR, { color: colors.onBrand, opacity: 0.85, fontSize: 13.5 }]}>
               {"‎" + profile.phone}
             </Text>
-            <View style={{ ...ROW, gap: 6 }}>
-              <Badge label={t(isPro ? "profileRolePro" : "profileRoleCustomer")} tone={isPro ? "brand" : "neutral"} />
+            <View style={{ ...ROW, gap: 6, marginTop: 2 }}>
+              <View
+                style={{
+                  ...ROW,
+                  gap: 4,
+                  borderRadius: radius.full,
+                  borderWidth: 1,
+                  borderColor: colors.onBrand,
+                  paddingHorizontal: 10,
+                  paddingVertical: 3,
+                }}
+              >
+                <Ionicons name={isPro ? "briefcase" : "person"} size={11} color={colors.onBrand} />
+                <Text style={{ color: colors.onBrand, fontSize: 11.5, fontWeight: "700" }}>
+                  {t(isPro ? "profileRolePro" : "profileRoleCustomer")}
+                </Text>
+              </View>
               {verified ? (
                 <View style={{ ...ROW, gap: 3 }}>
-                  <Ionicons name="checkmark-circle" size={15} color={colors.info} />
-                  <Text style={{ color: colors.info, fontSize: 12, fontWeight: "700" }}>{t("verified")}</Text>
+                  <Ionicons name="checkmark-circle" size={14} color={colors.onBrand} />
+                  <Text style={{ color: colors.onBrand, fontSize: 11.5, fontWeight: "700" }}>
+                    {t("verified")}
+                  </Text>
                 </View>
               ) : null}
             </View>
           </View>
         </View>
-      </Card>
+
+        <Pressable
+          onPress={() => router.push("/edit-profile")}
+          style={({ pressed }) => ({
+            ...ROW,
+            // RTL: hug the start edge, which is the right one
+            alignSelf: "flex-end",
+            gap: 6,
+            borderRadius: radius.full,
+            borderWidth: 1.5,
+            borderColor: colors.onBrand,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            opacity: pressed ? 0.75 : 1,
+          })}
+        >
+          <Ionicons name="create-outline" size={15} color={colors.onBrand} />
+          <Text style={{ color: colors.onBrand, fontSize: 13, fontWeight: "700" }}>
+            {t("profileEditProfile")}
+          </Text>
+        </Pressable>
+      </View>
 
       {/* ---------- become a pro (customers only) ---------- */}
       {!isPro ? (
@@ -197,22 +332,23 @@ export default function ProfileScreen() {
           <View style={{ ...ROW, gap: spacing.md }}>
             <View
               style={{
-                width: 48,
-                height: 48,
-                borderRadius: 15,
+                width: 46,
+                height: 46,
+                borderRadius: radius.md,
                 backgroundColor: colors.brand,
                 alignItems: "center",
                 justifyContent: "center",
-                ...shadows.cta,
               }}
             >
-              <Ionicons name="briefcase" size={23} color={colors.onBrand} />
+              <Ionicons name="briefcase" size={22} color={colors.onBrand} />
             </View>
             <View style={{ flex: 1, gap: 3 }}>
-              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 16, fontWeight: "800" }]}>
+              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 15.5, fontWeight: "800" }]}>
                 {t("profileBecomeProTitle")}
               </Text>
-              <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13 }]}>{t("profileBecomeProSubtitle")}</Text>
+              <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, lineHeight: 19 }]}>
+                {t("profileBecomeProSubtitle")}
+              </Text>
             </View>
           </View>
           <Button title={t("profileBecomeProCta")} onPress={() => router.push("/become-pro")} />
@@ -222,77 +358,86 @@ export default function ProfileScreen() {
       {/* ---------- account ---------- */}
       <View>
         <SectionHeader title={t("profileSectionAccount")} />
-        <View style={{ backgroundColor: colors.card, borderRadius: radius.lg, ...shadows.card }}>
-        <MenuRow icon="create-outline" label={t("profileEditProfile")} onPress={() => router.push("/edit-profile")} />
-        <Divider />
-        <MenuRow
-          icon="notifications-outline"
-          label={t("notifications")}
-          onPress={() => router.push("/notifications")}
-        />
-        {isPro ? (
+        {group(
           <>
-            <Divider />
             <MenuRow
-              icon="briefcase-outline"
-              label={t("profileBusinessSettings")}
-              onPress={() => router.push("/pro-settings")}
+              icon="notifications-outline"
+              label={t("notifications")}
+              onPress={() => router.push("/notifications")}
             />
-            <Divider />
-            <MenuRow
-              icon={mode === "pro" ? "person-outline" : "flash-outline"}
-              label={t(mode === "pro" ? "profileSwitchToCustomer" : "profileSwitchToPro")}
-              onPress={() => setMode(mode === "pro" ? "customer" : "pro")}
-              hideChevron
-            >
-              <Ionicons name="swap-horizontal" size={18} color={colors.brand} />
-            </MenuRow>
+            {isPro ? (
+              <>
+                <Divider />
+                <MenuRow
+                  icon="briefcase-outline"
+                  label={t("profileBusinessSettings")}
+                  onPress={() => router.push("/pro-settings")}
+                />
+                <Divider />
+                <MenuRow
+                  icon={mode === "pro" ? "person-outline" : "flash-outline"}
+                  label={t(mode === "pro" ? "profileSwitchToCustomer" : "profileSwitchToPro")}
+                  onPress={() => setMode(mode === "pro" ? "customer" : "pro")}
+                  hideChevron
+                >
+                  <Ionicons name="swap-horizontal" size={18} color={colors.brand} />
+                </MenuRow>
+              </>
+            ) : null}
           </>
-        ) : null}
-        </View>
+        )}
       </View>
 
       {/* ---------- preferences ---------- */}
       <View>
         <SectionHeader title={t("profileSectionPreferences")} />
-        <View style={{ backgroundColor: colors.card, borderRadius: radius.lg, ...shadows.card }}>
-        <MenuRow icon="language-outline" label={t("language")}>
-          <View style={{ ...ROW, gap: 6 }}>
-            {(["ar", "he"] as Lang[]).map((l) => (
-              <Chip key={l} label={LANG_NAMES[l]} active={lang === l} onPress={() => setLang(l)} />
-            ))}
-          </View>
-        </MenuRow>
-        <Divider />
-        <MenuRow icon="moon-outline" label={t("profileAppearance")} />
-        <View style={{ ...ROW, gap: 8, paddingHorizontal: spacing.lg, paddingBottom: 14, flexWrap: "wrap" }}>
-          {themeChips.map((c) => (
-            <Chip key={c.key} label={c.label} active={themeMode === c.key} onPress={() => setThemeMode(c.key)} />
-          ))}
-        </View>
-        <Divider />
-        <MenuRow
-          icon="information-circle-outline"
-          label={t("profileAboutLegal")}
-          onPress={() => setAboutVisible(true)}
-        />
-        </View>
+        {group(
+          <>
+            <MenuRow icon="language-outline" label={t("language")} hideChevron>
+              <Segmented
+                options={(["ar", "he"] as Lang[]).map((l) => ({ key: l, label: LANG_NAMES[l] }))}
+                value={lang}
+                onChange={setLang}
+              />
+            </MenuRow>
+            <Divider />
+            <MenuRow icon="moon-outline" label={t("profileAppearance")} hideChevron>
+              <Segmented
+                options={[
+                  { key: "light", icon: "sunny-outline", a11y: t("lightMode") },
+                  { key: "dark", icon: "moon-outline", a11y: t("darkMode") },
+                  { key: "system", icon: "phone-portrait-outline", a11y: t("systemMode") },
+                ]}
+                value={themeMode}
+                onChange={setThemeMode}
+              />
+            </MenuRow>
+            <Divider />
+            <MenuRow
+              icon="information-circle-outline"
+              label={t("profileAboutLegal")}
+              onPress={() => setAboutVisible(true)}
+            />
+          </>
+        )}
       </View>
 
       {/* ---------- sign out + delete account ---------- */}
-      <View style={{ backgroundColor: colors.card, borderRadius: radius.lg, ...shadows.card }}>
-        <MenuRow icon="log-out-outline" label={t("profileSignOut")} onPress={confirmSignOut} danger hideChevron />
-        <Divider />
-        <MenuRow
-          icon="trash-outline"
-          label={t("profileDeleteAccount")}
-          onPress={deleting ? undefined : confirmDeleteAccount}
-          danger
-          hideChevron
-        >
-          {deleting ? <ActivityIndicator size="small" color={colors.danger} /> : null}
-        </MenuRow>
-      </View>
+      {group(
+        <>
+          <MenuRow icon="log-out-outline" label={t("profileSignOut")} onPress={confirmSignOut} danger hideChevron />
+          <Divider />
+          <MenuRow
+            icon="trash-outline"
+            label={t("profileDeleteAccount")}
+            onPress={deleting ? undefined : confirmDeleteAccount}
+            danger
+            hideChevron
+          >
+            {deleting ? <ActivityIndicator size="small" color={colors.danger} /> : null}
+          </MenuRow>
+        </>
+      )}
 
       <Text style={{ color: colors.faint, fontSize: 12, textAlign: "center" }}>
         {t("profileVersion", { version })}

@@ -5,6 +5,11 @@
 // + a note), the customer compares them, accepts one — and only then does the
 // professional's phone number appear so the two can settle the details by
 // phone or WhatsApp.
+//
+// Layout follows that story rather than the data model: one small header card
+// (what the job is + where it stands), then whatever matters RIGHT NOW — the
+// quotes while it is open, the contact card once it is accepted — and only
+// then the details the customer already knows because they typed them.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -29,7 +34,7 @@ import { supabase } from "../../lib/supabase";
 import { channelTopic } from "../../lib/realtime";
 import { getOrCreateConversation } from "../../lib/chat";
 import { callPhone, fetchContactPhone, openWhatsApp } from "../../lib/contact";
-import { formatDateTime, STATUS_KEY } from "../../lib/format";
+import { formatDateTime, STATUS_KEY, STATUS_TONE } from "../../lib/format";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
 import {
   Avatar,
@@ -42,8 +47,9 @@ import {
   Loading,
   SectionHeader,
   StarRating,
+  StatusPill,
 } from "../../components/ui";
-import { OfferCard, proDisplayName, quotePriceText } from "../../components/OfferCard";
+import { MONEY_TEXT, OfferCard, proDisplayName, quotePriceText } from "../../components/OfferCard";
 import type { QuoteOffer } from "../../components/OfferCard";
 import { RateModal } from "../../components/RateModal";
 import { useToast } from "../../components/Toast";
@@ -110,8 +116,45 @@ function Pulse({ children }: { children: React.ReactNode }) {
   return <Animated.View style={{ opacity }}>{children}</Animated.View>;
 }
 
+/**
+ * Borderless text action. The bottom of this screen is a list of things the
+ * customer will rarely want (cancel, report) — as outlined buttons they shout
+ * over the job itself, so they are quiet links instead.
+ */
+function QuietAction({
+  icon,
+  label,
+  color,
+  onPress,
+  disabled,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  color: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={8}
+      style={({ pressed }) => ({
+        ...ROW,
+        gap: 7,
+        justifyContent: "center",
+        paddingVertical: 10,
+        opacity: disabled ? 0.4 : pressed ? 0.6 : 1,
+      })}
+    >
+      <Ionicons name={icon} size={16} color={color} />
+      <Text style={{ color, fontSize: 14, fontWeight: "700" }}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export default function BookingDetail() {
-  const { colors, shadows } = useTheme();
+  const { colors } = useTheme();
   const { t, lang, loc } = useI18n();
   const { session } = useAuth();
   const toast = useToast();
@@ -134,6 +177,9 @@ export default function BookingDetail() {
   const [cancelling, setCancelling] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
   const [viewerUri, setViewerUri] = useState<string | null>(null);
+  // The photo strip is laid out row-reverse, so its "end" is the right edge —
+  // where the first photo lives. Without this jump it opens on the last one.
+  const photosRef = useRef<ScrollView>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -341,7 +387,7 @@ export default function BookingDetail() {
       <Pressable onPress={() => router.back()} hitSlop={10}>
         <Ionicons name="arrow-forward" size={24} color={colors.text} />
       </Pressable>
-      <Text style={{ color: colors.text, fontSize: 18, fontWeight: "800" }}>{t("bookingDetails")}</Text>
+      <Text style={[RTL_TEXT, { color: colors.text, fontSize: 18, fontWeight: "800" }]}>{t("bookingDetails")}</Text>
     </View>
   );
 
@@ -374,112 +420,141 @@ export default function BookingDetail() {
   const showFinal = isDone && finalPrice !== null;
   const priceText = showFinal ? formatPrice(finalPrice) : agreedRange;
   const priceLabel = showFinal ? t("quoteFinalPriceLabel") : t("quoteAgreedPriceLabel");
-  const whatsappMessage = t("quoteWhatsAppPrefill", {
-    title: booking.title || (booking.category ? loc(booking.category, "name") : ""),
-  });
+  const categoryName = booking.category ? loc(booking.category, "name") : "";
+  const jobTitle = booking.title || categoryName || t("category");
+  const whatsappMessage = t("quoteWhatsAppPrefill", { title: booking.title || categoryName });
+  const isUrgent = booking.urgency === "same_day";
+  // Badge tones and StatusPill tones agree everywhere except "gold", which the
+  // pill doesn't have — the warn tint is the same amber.
+  const statusTone = STATUS_TONE[booking.status];
+  const pillTone = statusTone === "gold" ? "warn" : statusTone;
+  const nextStep = currentIdx >= 0 && currentIdx + 1 < steps.length ? steps[currentIdx + 1] : null;
+  // The customer's own words + photos sit above a hairline; the logistics
+  // (where, when, how much) sit below it. No words, no rule.
+  const hasJobBody = Boolean(booking.description || booking.photos.length > 0);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       {header}
       <ScrollView
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 32, gap: spacing.xl }}
+        showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
       >
-        {/* status: danger banner or timeline */}
-        {isTerminated ? (
-          <View
-            style={{
-              backgroundColor: colors.dangerTint,
-              borderRadius: radius.lg,
-              padding: spacing.lg,
-              gap: 6,
-            }}
-          >
-            <View style={{ ...ROW, gap: 8 }}>
-              <Ionicons name="alert-circle" size={20} color={colors.danger} />
-              <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 15, fontWeight: "800", flex: 1 }]}>
-                {booking.status === "cancelled" ? t("cancelledBanner") : t("rejectedBanner")}
-              </Text>
+        {/* ---------- what the job is + where it stands (one card) ---------- */}
+        <Card style={{ gap: spacing.md }}>
+          <View style={{ ...ROW, gap: 10, alignItems: "flex-start" }}>
+            <View
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: radius.md,
+                backgroundColor: colors.brandTint,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <MaterialCommunityIcons
+                name={(booking.category?.icon as MCIName) ?? "tools"}
+                size={22}
+                color={colors.brand}
+              />
             </View>
-            {booking.cancel_reason ? (
-              <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 13 }]}>
-                {t("cancelReasonLabel")}: {booking.cancel_reason}
+            <View style={{ flex: 1, gap: 6 }}>
+              <Text
+                numberOfLines={2}
+                style={[RTL_TEXT, { color: colors.text, fontSize: 16.5, fontWeight: "800", lineHeight: 23 }]}
+              >
+                {jobTitle}
               </Text>
-            ) : null}
-          </View>
-        ) : (
-          <View style={{ gap: spacing.md }}>
-            <SectionHeader title={t("bookingStatus")} />
-            <Card style={{ gap: spacing.md }}>
-              {/* horizontal tracker: dots on a connector rail */}
-              <View style={{ flexDirection: "row-reverse", justifyContent: "space-between" }}>
-                {steps.map((s, i) => {
-                  const done = i <= currentIdx;
-                  const current = i === currentIdx;
-                  return (
-                    <View key={s} style={{ flex: 1, alignItems: "center", gap: 6 }}>
-                      {i > 0 ? (
-                        // the rail runs from this dot back to the previous one (RTL: to its right)
-                        <View
-                          style={{
-                            position: "absolute",
-                            height: 3,
-                            top: 9.5,
-                            right: "-50%",
-                            width: "100%",
-                            backgroundColor: done ? colors.brand : colors.border,
-                          }}
-                        />
-                      ) : null}
-                      <View
-                        style={{
-                          width: 22,
-                          height: 22,
-                          borderRadius: radius.full,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          borderWidth: 2,
-                          backgroundColor: done ? colors.brand : colors.chip,
-                          borderColor: done ? colors.brand : colors.border,
-                          ...(current ? shadows.cta : null),
-                        }}
-                      >
-                        {done ? <Ionicons name="checkmark" size={12} color={colors.onBrand} /> : null}
-                      </View>
-                      <Text
-                        numberOfLines={2}
-                        style={{
-                          fontSize: 11,
-                          textAlign: "center",
-                          color: done ? colors.text : colors.muted,
-                          fontWeight: done ? "700" : "500",
-                        }}
-                      >
-                        {t(STATUS_KEY[s === "completed" && booking.status === "rated" ? "rated" : s])}
-                      </Text>
-                    </View>
-                  );
-                })}
+              <View style={{ ...ROW, gap: 8 }}>
+                <Badge
+                  label={isUrgent ? t("quoteUrgencyUrgent") : t("quoteUrgencyScheduled")}
+                  tone={isUrgent ? "danger" : "info"}
+                />
+                {categoryName && categoryName !== jobTitle ? (
+                  <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.faint, fontSize: 12, flexShrink: 1 }]}>
+                    {categoryName}
+                  </Text>
+                ) : null}
               </View>
-            </Card>
+            </View>
           </View>
-        )}
 
-        {/* ---------- contact card: the payoff of accepting a quote ---------- */}
+          <View style={{ height: 1, backgroundColor: colors.hairline }} />
+
+          {isTerminated ? (
+            <View
+              style={{
+                backgroundColor: colors.dangerTint,
+                borderRadius: radius.md,
+                padding: spacing.md,
+                gap: 5,
+              }}
+            >
+              <View style={{ ...ROW, gap: 8 }}>
+                <Ionicons name="alert-circle" size={18} color={colors.danger} />
+                <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 14, fontWeight: "800", flex: 1 }]}>
+                  {booking.status === "cancelled" ? t("cancelledBanner") : t("rejectedBanner")}
+                </Text>
+              </View>
+              {booking.cancel_reason ? (
+                <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12.5, lineHeight: 18 }]}>
+                  {t("cancelReasonLabel")}: {booking.cancel_reason}
+                </Text>
+              ) : null}
+            </View>
+          ) : (
+            /* compact tracker: live status + a five-segment rail that fills
+               from the right — five labelled dots dominated the screen */
+            <View style={{ gap: 9 }}>
+              <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
+                <StatusPill
+                  label={t(STATUS_KEY[booking.status])}
+                  tone={pillTone}
+                  glow={booking.status === "open" || booking.status === "in_progress"}
+                />
+                <Text style={[MONEY_TEXT, { color: colors.faint, fontSize: 12, fontWeight: "700" }]}>
+                  {`${Math.max(currentIdx + 1, 1)}/${steps.length}`}
+                </Text>
+              </View>
+              <View style={{ ...ROW, gap: 4 }}>
+                {steps.map((s, i) => (
+                  <View
+                    key={s}
+                    style={{
+                      flex: 1,
+                      height: 5,
+                      borderRadius: radius.full,
+                      backgroundColor: i <= currentIdx ? colors.brand : colors.chip,
+                    }}
+                  />
+                ))}
+              </View>
+              {nextStep ? (
+                <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12 }]}>
+                  {t("stepNext", { step: t(STATUS_KEY[nextStep]) })}
+                </Text>
+              ) : null}
+            </View>
+          )}
+        </Card>
+
+        {/* ---------- contact: the payoff of accepting a quote, so it leads ---------- */}
         {showContactCard ? (
-          <View style={{ gap: spacing.md }}>
+          <View>
             <SectionHeader title={t("quoteContactTitle")} />
             <Card style={{ gap: spacing.lg }}>
               <Pressable
                 onPress={() => (booking.professional_id ? router.push(`/pro/${booking.professional_id}` as never) : null)}
                 style={({ pressed }) => ({ ...ROW, gap: 12, opacity: pressed ? 0.7 : 1 })}
               >
-                <Avatar uri={pro?.profile?.avatar_url} name={proName} size={52} />
-                <View style={{ flex: 1, gap: 3 }}>
+                <Avatar uri={pro?.profile?.avatar_url} name={proName} size={54} />
+                <View style={{ flex: 1, gap: 4 }}>
                   <View style={{ ...ROW, gap: 6 }}>
                     <Text
                       numberOfLines={1}
-                      style={[RTL_TEXT, { color: colors.text, fontSize: 16, fontWeight: "800", flexShrink: 1 }]}
+                      style={[RTL_TEXT, { color: colors.text, fontSize: 16.5, fontWeight: "800", flexShrink: 1 }]}
                     >
                       {proName || t("quoteUnknownPro")}
                     </Text>
@@ -489,11 +564,13 @@ export default function BookingDetail() {
                   </View>
                   <View style={{ ...ROW, gap: 6 }}>
                     <StarRating rating={pro?.rating_avg ?? 0} size={13} />
-                    <Text style={{ color: colors.muted, fontSize: 12 }}>
-                      {(pro?.rating_count ?? 0) > 0
-                        ? `${Number(pro?.rating_avg ?? 0).toFixed(1)} (${pro?.rating_count ?? 0})`
-                        : t("quoteNoRatingYet")}
-                    </Text>
+                    {(pro?.rating_count ?? 0) > 0 ? (
+                      <Text style={[MONEY_TEXT, { color: colors.muted, fontSize: 12 }]}>
+                        {`${Number(pro?.rating_avg ?? 0).toFixed(1)} (${pro?.rating_count ?? 0})`}
+                      </Text>
+                    ) : (
+                      <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12 }]}>{t("quoteNoRatingYet")}</Text>
+                    )}
                   </View>
                 </View>
                 <Ionicons name="chevron-back" size={18} color={colors.faint} />
@@ -518,7 +595,7 @@ export default function BookingDetail() {
                     numberOfLines={1}
                     adjustsFontSizeToFit
                     minimumFontScale={0.7}
-                    style={{ color: colors.brand, fontSize: 20, fontWeight: "800", flexShrink: 1 }}
+                    style={[MONEY_TEXT, { color: colors.brand, fontSize: 20, fontWeight: "800", flexShrink: 1 }]}
                   >
                     {priceText}
                   </Text>
@@ -534,31 +611,36 @@ export default function BookingDetail() {
                   <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, lineHeight: 18 }]}>
                     {t("quoteContactHint")}
                   </Text>
-                  <View style={{ ...ROW, gap: 10 }}>
-                    <Button
-                      title={t("call")}
-                      icon="phone"
-                      style={{ flex: 1 }}
-                      onPress={() => {
-                        callPhone(contactPhone);
-                      }}
-                    />
-                    <Button
-                      title={t("quoteWhatsApp")}
-                      icon="whatsapp"
-                      variant="success"
-                      style={{ flex: 1 }}
-                      onPress={() => {
-                        openWhatsApp(contactPhone, whatsappMessage);
-                      }}
-                    />
-                  </View>
+                  {/* the number itself: Latin digits, pinned LTR so it never flips */}
+                  <Text
+                    style={[
+                      MONEY_TEXT,
+                      { textAlign: "center", color: colors.text, fontSize: 19, fontWeight: "800", letterSpacing: 1 },
+                    ]}
+                  >
+                    {contactPhone}
+                  </Text>
                   <Button
-                    title={t("quoteChatInApp")}
-                    icon="chat-outline"
-                    variant="outline"
-                    loading={chatLoading}
+                    title={t("quoteCallNow")}
+                    icon="phone"
+                    onPress={() => {
+                      callPhone(contactPhone);
+                    }}
+                  />
+                  <Button
+                    title={t("quoteWhatsApp")}
+                    icon="whatsapp"
+                    variant="success"
+                    onPress={() => {
+                      openWhatsApp(contactPhone, whatsappMessage);
+                    }}
+                  />
+                  <QuietAction
+                    icon="chatbubble-ellipses-outline"
+                    label={t("quoteChatInApp")}
+                    color={colors.brand}
                     onPress={openChat}
+                    disabled={chatLoading}
                   />
                 </View>
               ) : (
@@ -577,26 +659,26 @@ export default function BookingDetail() {
           </View>
         ) : null}
 
-        {/* ---------- quotes — only while the request is collecting ---------- */}
+        {/* ---------- quotes — the hero while the request is collecting ---------- */}
         {booking.status === "open" ? (
-          <View style={{ gap: spacing.md }}>
+          <View>
             <SectionHeader title={t("quotesTitle", { n: pendingOffers.length })} />
             {pendingOffers.length === 0 ? (
               <View style={{ gap: spacing.md }}>
                 <Pulse>
                   <Card style={{ alignItems: "center", gap: 8, paddingVertical: spacing.xl }}>
                     <MaterialCommunityIcons name="timer-sand" size={30} color={colors.brand} />
-                    <Text style={[RTL_TEXT, { color: colors.text, fontSize: 15, fontWeight: "700", textAlign: "center" }]}>
+                    <Text style={{ color: colors.text, fontSize: 15, fontWeight: "700", textAlign: "center" }}>
                       {t("waitingOffersTitle")}
                     </Text>
-                    <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, textAlign: "center" }]}>
+                    <Text style={{ color: colors.muted, fontSize: 12.5, textAlign: "center", lineHeight: 19 }}>
                       {t("waitingOffersSubtitle")}
                     </Text>
                   </Card>
                 </Pulse>
                 <View style={{ ...ROW, gap: 6, justifyContent: "center", paddingHorizontal: spacing.md }}>
                   <Ionicons name="notifications-outline" size={14} color={colors.faint} />
-                  <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12, flexShrink: 1, textAlign: "center" }]}>
+                  <Text style={{ color: colors.faint, fontSize: 12, flexShrink: 1, textAlign: "center" }}>
                     {t("notifyProsHint")}
                   </Text>
                 </View>
@@ -622,7 +704,7 @@ export default function BookingDetail() {
             {/* declined quotes stay visible (collapsed) — a quote that simply
                 disappeared would read as a bug */}
             {declinedOffers.length > 0 ? (
-              <View style={{ gap: spacing.sm }}>
+              <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
                 <Pressable
                   onPress={() => setShowDeclined((v) => !v)}
                   style={({ pressed }) => ({ ...ROW, gap: 6, opacity: pressed ? 0.6 : 1, paddingVertical: 4 })}
@@ -661,7 +743,10 @@ export default function BookingDetail() {
                           </Text>
                           {price ? (
                             <Text
-                              style={{ color: colors.faint, fontSize: 13, textDecorationLine: "line-through" }}
+                              style={[
+                                MONEY_TEXT,
+                                { color: colors.faint, fontSize: 13, textDecorationLine: "line-through" },
+                              ]}
                             >
                               {price}
                             </Text>
@@ -678,17 +763,20 @@ export default function BookingDetail() {
 
         {/* assigned professional, before contact unlocks (direct bookings) */}
         {showPlainProCard ? (
-          <View style={{ gap: spacing.md }}>
+          <View>
             <SectionHeader title={t("proSectionTitle")} />
             <Card style={{ gap: spacing.md }}>
               <Pressable
                 onPress={() => (booking.professional_id ? router.push(`/pro/${booking.professional_id}` as never) : null)}
-                style={{ ...ROW, gap: 12 }}
+                style={({ pressed }) => ({ ...ROW, gap: 12, opacity: pressed ? 0.7 : 1 })}
               >
-                <Avatar uri={pro?.profile?.avatar_url} name={proName} size={50} />
-                <View style={{ flex: 1 }}>
+                <Avatar uri={pro?.profile?.avatar_url} name={proName} size={48} />
+                <View style={{ flex: 1, gap: 3 }}>
                   <View style={{ ...ROW, gap: 6 }}>
-                    <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 15.5, fontWeight: "800" }]}>
+                    <Text
+                      numberOfLines={1}
+                      style={[RTL_TEXT, { color: colors.text, fontSize: 15.5, fontWeight: "800", flexShrink: 1 }]}
+                    >
                       {proName || t("quoteUnknownPro")}
                     </Text>
                     {pro?.verification_status === "approved" ? (
@@ -697,59 +785,37 @@ export default function BookingDetail() {
                   </View>
                   <View style={{ ...ROW, gap: 6 }}>
                     <StarRating rating={pro?.rating_avg ?? 0} size={13} />
-                    <Text style={{ color: colors.muted, fontSize: 12 }}>
-                      {(pro?.rating_avg ?? 0).toFixed(1)} ({pro?.rating_count ?? 0})
+                    <Text style={[MONEY_TEXT, { color: colors.muted, fontSize: 12 }]}>
+                      {`${Number(pro?.rating_avg ?? 0).toFixed(1)} (${pro?.rating_count ?? 0})`}
                     </Text>
                   </View>
                 </View>
+                <Ionicons name="chevron-back" size={18} color={colors.faint} />
               </Pressable>
               <Button title={t("message")} icon="chat" small loading={chatLoading} onPress={openChat} />
             </Card>
           </View>
         ) : null}
 
-        {/* details */}
-        <View style={{ gap: spacing.md }}>
+        {/* ---------- the details the customer already typed: they recede ---------- */}
+        <View>
           <SectionHeader title={t("detailsTitle")} />
           <Card style={{ gap: spacing.md }}>
-            <View style={{ ...ROW, gap: 8 }}>
-              <View
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: radius.md,
-                  backgroundColor: colors.brandTint,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <MaterialCommunityIcons
-                  name={(booking.category?.icon as MCIName) ?? "tools"}
-                  size={18}
-                  color={colors.brand}
-                />
-              </View>
-              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 15, fontWeight: "800", flex: 1 }]}>
-                {booking.title || (booking.category ? loc(booking.category, "name") : t("category"))}
-              </Text>
-            </View>
-
-            {/* how soon it's needed */}
-            <View style={{ ...ROW, gap: 6 }}>
-              <Badge
-                label={booking.urgency === "same_day" ? t("quoteUrgencyUrgent") : t("quoteUrgencyScheduled")}
-                tone={booking.urgency === "same_day" ? "danger" : "info"}
-              />
-            </View>
-
             {booking.description ? (
-              <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13.5, lineHeight: 20 }]}>
+              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 13.5, lineHeight: 21 }]}>
                 {booking.description}
               </Text>
             ) : null}
+
             {booking.photos.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                {[...booking.photos].reverse().map((uri) => (
+              <ScrollView
+                ref={photosRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                onContentSizeChange={() => photosRef.current?.scrollToEnd({ animated: false })}
+                contentContainerStyle={{ gap: 8, flexDirection: "row-reverse" }}
+              >
+                {booking.photos.map((uri) => (
                   <Pressable key={uri} onPress={() => setViewerUri(uri)}>
                     <Image
                       source={{ uri }}
@@ -760,10 +826,13 @@ export default function BookingDetail() {
                 ))}
               </ScrollView>
             ) : null}
+
+            {hasJobBody ? <View style={{ height: 1, backgroundColor: colors.hairline }} /> : null}
+
             {booking.address || booking.city || (booking.lat != null && booking.lng != null) ? (
-              <View style={{ ...ROW, gap: 6, alignItems: "flex-start" }}>
+              <View style={{ ...ROW, gap: 8, alignItems: "flex-start" }}>
                 <Ionicons name="location-outline" size={16} color={colors.faint} style={{ marginTop: 2 }} />
-                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, flex: 1 }]}>
+                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, flex: 1, lineHeight: 19 }]}>
                   {[booking.city ? loc(booking.city, "name") : null, booking.address || null]
                     .filter(Boolean)
                     .join(" · ") || t("locationOnMap")}
@@ -784,54 +853,55 @@ export default function BookingDetail() {
                 ) : null}
               </View>
             ) : null}
-            <View style={{ ...ROW, gap: 6 }}>
+
+            <View style={{ ...ROW, gap: 8 }}>
               <Ionicons name="time-outline" size={16} color={colors.faint} />
-              <Text style={{ color: colors.muted, fontSize: 13 }}>
-                {t("scheduledFor")}: {booking.scheduled_at ? formatDateTime(booking.scheduled_at, lang) : t("asap")}
+              <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, flex: 1 }]}>
+                {`${t("scheduledFor")}: ${
+                  booking.scheduled_at ? formatDateTime(booking.scheduled_at, lang) : t("asap")
+                }`}
               </Text>
             </View>
 
             {/* money summary: agreed range / final price, plus the request fee.
                 A zero fee renders nothing — "₪0" would only confuse. */}
             {priceText || serviceFee > 0 ? (
-              <View
-                style={{
-                  borderTopWidth: 1,
-                  borderTopColor: colors.border,
-                  paddingTop: spacing.md,
-                  gap: 8,
-                }}
-              >
-                {priceText ? (
-                  <>
-                    <View style={{ ...ROW, justifyContent: "space-between", gap: 10 }}>
-                      <Text style={{ color: colors.text, fontSize: 14, fontWeight: "700" }}>{priceLabel}</Text>
-                      <Text
-                        numberOfLines={1}
-                        adjustsFontSizeToFit
-                        minimumFontScale={0.7}
-                        style={{ color: colors.brand, fontSize: 19, fontWeight: "800", flexShrink: 1 }}
-                      >
-                        {priceText}
-                      </Text>
-                    </View>
+              <>
+                <View style={{ height: 1, backgroundColor: colors.hairline }} />
+                <View style={{ gap: 8 }}>
+                  {priceText ? (
+                    <>
+                      <View style={{ ...ROW, justifyContent: "space-between", gap: 10 }}>
+                        <Text style={[RTL_TEXT, { color: colors.text, fontSize: 14, fontWeight: "700" }]}>
+                          {priceLabel}
+                        </Text>
+                        <Text
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.7}
+                          style={[MONEY_TEXT, { color: colors.brand, fontSize: 19, fontWeight: "800", flexShrink: 1 }]}
+                        >
+                          {priceText}
+                        </Text>
+                      </View>
+                      <View style={{ ...ROW, gap: 8 }}>
+                        <Badge label={t("cash")} tone="success" />
+                        <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12, flex: 1, lineHeight: 18 }]}>
+                          {showFinal ? t("cashNote") : t("quoteRangeNote")}
+                        </Text>
+                      </View>
+                    </>
+                  ) : null}
+                  {serviceFee > 0 ? (
                     <View style={{ ...ROW, gap: 6 }}>
-                      <Badge label={t("cash")} tone="success" />
-                      <Text style={{ color: colors.faint, fontSize: 12, flexShrink: 1 }}>
-                        {showFinal ? t("cashNote") : t("quoteRangeNote")}
+                      <Ionicons name="receipt-outline" size={14} color={colors.faint} />
+                      <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12, flexShrink: 1 }]}>
+                        {t("quoteServiceFee", { amount: formatPrice(serviceFee) })}
                       </Text>
                     </View>
-                  </>
-                ) : null}
-                {serviceFee > 0 ? (
-                  <View style={{ ...ROW, gap: 6 }}>
-                    <Ionicons name="receipt-outline" size={14} color={colors.faint} />
-                    <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12, flexShrink: 1 }]}>
-                      {t("quoteServiceFee", { amount: formatPrice(serviceFee) })}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
+                  ) : null}
+                </View>
+              </>
             ) : null}
           </Card>
         </View>
@@ -839,34 +909,18 @@ export default function BookingDetail() {
         {/* given rating (readonly) — shown as soon as the review row exists,
             even if the trigger hasn't flipped the status to 'rated' yet */}
         {review ? (
-          <Card style={{ ...ROW, justifyContent: "space-between" }}>
-            <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: "700" }}>{t("yourRating")}</Text>
+          <Card style={{ ...ROW, justifyContent: "space-between", gap: 10 }}>
+            <Text style={[RTL_TEXT, { color: colors.text, fontSize: 14.5, fontWeight: "700" }]}>
+              {t("yourRating")}
+            </Text>
             <StarRating rating={review.rating} size={20} />
           </Card>
         ) : null}
 
-        {/* actions */}
-        <View style={{ gap: spacing.md }}>
+        {/* ---------- actions: one loud, the rest quiet ---------- */}
+        <View style={{ gap: spacing.xs }}>
           {booking.status === "completed" && booking.professional_id && !review ? (
             <Button title={t("rateService")} icon="star" onPress={() => setRateVisible(true)} />
-          ) : null}
-          {canCancel ? (
-            <Pressable
-              onPress={() => setCancelVisible(true)}
-              style={({ pressed }) => ({
-                ...ROW,
-                justifyContent: "center",
-                gap: 8,
-                borderWidth: 1.5,
-                borderColor: colors.danger,
-                borderRadius: radius.md,
-                paddingVertical: 13,
-                opacity: pressed ? 0.7 : 1,
-              })}
-            >
-              <Ionicons name="close-circle-outline" size={18} color={colors.danger} />
-              <Text style={{ color: colors.danger, fontSize: 15, fontWeight: "700" }}>{t("cancelBooking")}</Text>
-            </Pressable>
           ) : null}
 
           {/* Once the pro is on the job the cancel button is gone; without this the
@@ -882,6 +936,7 @@ export default function BookingDetail() {
                 borderRadius: radius.md,
                 paddingHorizontal: 12,
                 paddingVertical: 12,
+                marginBottom: spacing.xs,
                 opacity: pressed ? 0.75 : 1,
               })}
             >
@@ -899,10 +954,19 @@ export default function BookingDetail() {
               {booking.professional_id ? <Ionicons name="chevron-back" size={16} color={colors.warn} /> : null}
             </Pressable>
           ) : null}
-          <Button
-            title={t("reportProblem")}
-            variant="ghost"
+
+          {canCancel ? (
+            <QuietAction
+              icon="close-circle-outline"
+              label={t("cancelBooking")}
+              color={colors.danger}
+              onPress={() => setCancelVisible(true)}
+            />
+          ) : null}
+          <QuietAction
             icon="alert-circle-outline"
+            label={t("reportProblem")}
+            color={colors.muted}
             onPress={() =>
               router.push(
                 (`/report?bookingId=${booking.id}` +
@@ -943,7 +1007,9 @@ export default function BookingDetail() {
             <Text style={[RTL_TEXT, { color: colors.text, fontSize: 17, fontWeight: "800" }]}>
               {t("cancelBooking")}
             </Text>
-            <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13.5 }]}>{t("cancelConfirm")}</Text>
+            <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13.5, lineHeight: 20 }]}>
+              {t("cancelConfirm")}
+            </Text>
             <Input
               placeholder={t("cancelReasonPlaceholder")}
               value={cancelReason}
@@ -970,13 +1036,14 @@ export default function BookingDetail() {
         </View>
       </Modal>
 
-      {/* fullscreen photo viewer */}
+      {/* fullscreen photo viewer — the backdrop is the one place a raw hex is
+          right: it must be black regardless of the theme */}
       <Modal visible={viewerUri !== null} transparent animationType="fade" onRequestClose={() => setViewerUri(null)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.95)" }}>
           <Pressable
             onPress={() => setViewerUri(null)}
             hitSlop={12}
-            style={{ position: "absolute", top: insets.top + 12, right: 20, zIndex: 2 }}
+            style={{ position: "absolute", top: insets.top + 12, left: 20, zIndex: 2 }}
           >
             <Ionicons name="close" size={30} color="#ffffff" />
           </Pressable>

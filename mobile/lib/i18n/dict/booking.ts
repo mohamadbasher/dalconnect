@@ -59,7 +59,6 @@ export const booking: Dict = {
   bookingSentToast: { ar: "تم إرسال طلبك للمهني", he: "הבקשה נשלחה לבעל המקצוע" },
   requestPostedToast: { ar: "نشرنا طلبك — بانتظار العروض", he: "פרסמנו את הבקשה — ממתינים להצעות" },
   bookingFailedToast: { ar: "تعذر إرسال الطلب — حاول مرة أخرى", he: "שליחת הבקשה נכשלה — נסו שוב" },
-  offerAcceptedToast: { ar: "تم قبول عرض {name}", he: "ההצעה של {name} התקבלה" },
   bookingCancelledToast: { ar: "تم إلغاء الطلب", he: "ההזמנה בוטלה" },
 
   // ----- bookings tab -----
@@ -71,12 +70,16 @@ export const booking: Dict = {
   emptyDoneTitle: { ar: "لا توجد طلبات منتهية", he: "אין הזמנות שהושלמו" },
   emptyCancelledTitle: { ar: "لا توجد طلبات ملغاة", he: "אין הזמנות שבוטלו" },
   newRequestCta: { ar: "اطلب خدمة", he: "הזמנת שירות" },
+  bookingsListHint: {
+    ar: "اضغط على أي طلب لمتابعة العروض والتواصل مع المهني",
+    he: "הקישו על בקשה כדי לעקוב אחרי ההצעות וליצור קשר עם בעל המקצוע",
+  },
 
   // ----- booking detail -----
   bookingDetails: { ar: "تفاصيل الطلب", he: "פרטי ההזמנה" },
   bookingNotFound: { ar: "الطلب غير موجود", he: "ההזמנה לא נמצאה" },
-  bookingStatus: { ar: "حالة الطلب", he: "סטטוס ההזמנה" },
-  offersTitle: { ar: "العروض ({n})", he: "הצעות ({n})" },
+  /** compact tracker: what happens after the current step */
+  stepNext: { ar: "الخطوة التالية: {step}", he: "השלב הבא: {step}" },
   waitingOffersTitle: { ar: "بانتظار العروض…", he: "ממתינים להצעות…" },
   waitingOffersSubtitle: {
     ar: "أرسلنا طلبك للمهنيين القريبين منك، ستظهر العروض هنا فور وصولها",
@@ -86,10 +89,6 @@ export const booking: Dict = {
     ar: "أبلغنا المهنيين المناسبين في منطقتك — عادةً يصل أول عرض خلال دقائق",
     he: "עדכנו את בעלי המקצוע המתאימים באזורכם — בדרך כלל ההצעה הראשונה מגיעה תוך דקות",
   },
-  acceptOffer: { ar: "قبول العرض", he: "קבלת ההצעה" },
-  acceptOfferConfirm: { ar: "قبول عرض {name} بسعر {price}؟", he: "לקבל את ההצעה של {name} במחיר {price}?" },
-  viewProfile: { ar: "عرض الملف", he: "צפייה בפרופיל" },
-  etaChip: { ar: "يصل خلال {n} د", he: "מגיע תוך {n} דק׳" },
   proSectionTitle: { ar: "المهني", he: "בעל המקצוע" },
 
   // ----- quotes (request → price-range offers → contact reveal) -----
@@ -110,8 +109,7 @@ export const booking: Dict = {
   quoteNoRatingYet: { ar: "جديد", he: "חדש" },
   quoteUnknownPro: { ar: "مهني", he: "בעל מקצוע" },
   quoteAccept: { ar: "قبول العرض", he: "קבלת ההצעה" },
-  quoteDecline: { ar: "رفض", he: "דחייה" },
-  quoteViewProfile: { ar: "عرض الملف الكامل", he: "צפייה בפרופיל המלא" },
+  quoteDecline: { ar: "رفض هذا العرض", he: "דחיית ההצעה" },
   quoteAcceptTitle: { ar: "قبول عرض السعر", he: "קבלת הצעת המחיר" },
   quoteAcceptConfirm: {
     ar: "قبول عرض {name} بنطاق {price}؟ سنغلق باقي العروض ويظهر لك رقم هاتفه للتواصل معه.",
@@ -134,7 +132,8 @@ export const booking: Dict = {
     ar: "ستظهر معلومات التواصل بمجرد قبول أحد عروض الأسعار",
     he: "פרטי הקשר יופיעו ברגע שתקבלו אחת מהצעות המחיר",
   },
-  quoteWhatsApp: { ar: "واتساب", he: "ווטסאפ" },
+  quoteCallNow: { ar: "اتصل الآن", he: "התקשרו עכשיו" },
+  quoteWhatsApp: { ar: "مراسلة على واتساب", he: "הודעה בווטסאפ" },
   quoteChatInApp: { ar: "المراسلة داخل التطبيق", he: "התכתבות באפליקציה" },
   quoteWhatsAppPrefill: {
     ar: "مرحباً، أنا صاحب طلب «{title}» عبر تطبيق دال كونكت",

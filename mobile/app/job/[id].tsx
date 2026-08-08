@@ -11,6 +11,7 @@ import {
   RefreshControl,
   ScrollView,
   Text,
+  TextStyle,
   View,
 } from "react-native";
 import { Image } from "expo-image";
@@ -27,7 +28,17 @@ import { getOrCreateConversation } from "../../lib/chat";
 import { callPhone, fetchContactPhone, openWhatsApp } from "../../lib/contact";
 import { formatDateTime, STATUS_KEY, STATUS_TONE } from "../../lib/format";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
-import { Avatar, Badge, Button, Card, EmptyState, Input, Loading, SectionHeader } from "../../components/ui";
+import {
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  Loading,
+  SectionHeader,
+  SheetHandle,
+} from "../../components/ui";
 import { useToast } from "../../components/Toast";
 import type { Booking, BookingStatus, BookingUrgency } from "../../lib/types";
 
@@ -40,6 +51,9 @@ const STEP_ICONS: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> =
 };
 /** the phone number is handed over only from acceptance onwards */
 const CONTACT_STATUSES: BookingStatus[] = ["accepted", "on_the_way", "in_progress", "completed", "rated"];
+
+/** Prices and phone numbers are Latin digits — pin them LTR inside the RTL layout. */
+const LTR: TextStyle = { writingDirection: "ltr" };
 
 export default function JobScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -185,10 +199,13 @@ export default function JobScreen() {
         backgroundColor: colors.bg,
       }}
     >
+      {/* RTL: "forward" points left-to-right, so back is the right-pointing arrow */}
       <Pressable onPress={() => router.back()} hitSlop={10}>
         <Ionicons name="arrow-forward" size={24} color={colors.text} />
       </Pressable>
-      <Text style={{ color: colors.text, fontSize: 18, fontWeight: "800" }}>{t("jobTitle")}</Text>
+      <Text style={[RTL_TEXT, { flex: 1, color: colors.text, fontSize: 18, fontWeight: "800" }]}>
+        {t("jobTitle")}
+      </Text>
     </View>
   );
 
@@ -231,19 +248,20 @@ export default function JobScreen() {
             ? formatPrice(booking.price)
             : null;
 
+  // one accent for urgency — a tinted pill, no extra borders shouting alongside it
   const renderUrgency = (urgency: BookingUrgency) => {
     const urgent = urgency === "same_day";
     return (
       <View
         style={{
           ...ROW,
-          gap: 4,
-          paddingHorizontal: 9,
+          gap: 5,
+          // RTL: the pill hugs the right (start) edge under the title
+          alignSelf: "flex-end",
+          paddingHorizontal: 10,
           paddingVertical: 4,
           borderRadius: radius.full,
           backgroundColor: urgent ? colors.dangerTint : colors.chip,
-          borderWidth: urgent ? 1.5 : 1,
-          borderColor: urgent ? colors.danger : colors.border,
         }}
       >
         <MaterialCommunityIcons
@@ -252,11 +270,7 @@ export default function JobScreen() {
           color={urgent ? colors.danger : colors.muted}
         />
         <Text
-          style={{
-            color: urgent ? colors.danger : colors.muted,
-            fontSize: 11.5,
-            fontWeight: urgent ? "800" : "600",
-          }}
+          style={{ color: urgent ? colors.danger : colors.muted, fontSize: 11.5, fontWeight: "700" }}
         >
           {t(urgent ? "quoteUrgent" : "quoteScheduled")}
         </Text>
@@ -300,6 +314,7 @@ export default function JobScreen() {
       {Header}
       <ScrollView
         contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl }}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -318,36 +333,32 @@ export default function JobScreen() {
             style={{
               backgroundColor: colors.dangerTint,
               borderRadius: radius.lg,
-              padding: spacing.lg,
-              gap: 6,
-              borderWidth: 1.5,
-              borderColor: colors.danger,
+              padding: spacing.md,
+              gap: 4,
             }}
           >
             <View style={{ ...ROW, gap: 8 }}>
-              <Ionicons name="alert-circle" size={20} color={colors.danger} />
-              <Text
-                style={[RTL_TEXT, { color: colors.danger, fontSize: 14.5, fontWeight: "800", flexShrink: 1 }]}
-              >
+              <Ionicons name="alert-circle" size={19} color={colors.danger} />
+              <Text style={[RTL_TEXT, { flex: 1, color: colors.danger, fontSize: 14, fontWeight: "800" }]}>
                 {t("cancelledByCustomerTitle")}
               </Text>
             </View>
             {booking.cancel_reason ? (
-              <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 13 }]}>
+              <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12.5, lineHeight: 19 }]}>
                 {t("proCancelReasonLabel")}: {booking.cancel_reason}
               </Text>
             ) : null}
           </View>
         ) : null}
 
-        {/* status + quote range + stepper */}
+        {/* ---------- status + agreed range + stepper + the one action ---------- */}
         <Card style={{ gap: spacing.lg }}>
           <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
-            <View style={{ ...ROW, gap: 8, flexShrink: 1 }}>
+            <View style={{ ...ROW, gap: 10, flexShrink: 1 }}>
               <View
                 style={{
-                  width: 38,
-                  height: 38,
+                  width: 42,
+                  height: 42,
                   borderRadius: radius.md,
                   backgroundColor: colors.brandTint,
                   alignItems: "center",
@@ -356,11 +367,11 @@ export default function JobScreen() {
               >
                 <MaterialCommunityIcons
                   name={(booking.category?.icon as any) ?? "tools"}
-                  size={20}
+                  size={21}
                   color={colors.brand}
                 />
               </View>
-              <View style={{ flexShrink: 1, gap: 4 }}>
+              <View style={{ flexShrink: 1, gap: 5 }}>
                 <Text
                   numberOfLines={1}
                   style={[RTL_TEXT, { color: colors.text, fontSize: 16, fontWeight: "800" }]}
@@ -384,16 +395,15 @@ export default function JobScreen() {
               }}
             >
               <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
-                <View style={{ ...ROW, gap: 6, flexShrink: 1 }}>
-                  <Ionicons name="cash-outline" size={16} color={colors.brand} />
-                  <Text style={[RTL_TEXT, { color: colors.brand, fontSize: 13, fontWeight: "700" }]}>
-                    {t("quoteAgreedRange")}
-                  </Text>
-                </View>
-                <Text style={{ color: colors.brand, fontSize: 18, fontWeight: "800" }}>{rangeLabel}</Text>
+                <Text style={[RTL_TEXT, { color: colors.brand, fontSize: 13, fontWeight: "700", flexShrink: 1 }]}>
+                  {t("quoteAgreedRange")}
+                </Text>
+                <Text style={[LTR, { color: colors.brand, fontSize: 18, fontWeight: "800" }]}>{rangeLabel}</Text>
               </View>
               {!isDone ? (
-                <Text style={[RTL_TEXT, { color: colors.brand, fontSize: 12 }]}>{t("quoteFinalOnPhone")}</Text>
+                <Text style={[RTL_TEXT, { color: colors.brand, fontSize: 12, opacity: 0.85 }]}>
+                  {t("quoteFinalOnPhone")}
+                </Text>
               ) : null}
             </View>
           ) : null}
@@ -409,7 +419,7 @@ export default function JobScreen() {
                         style={{
                           flex: 1,
                           height: 3,
-                          borderRadius: 2,
+                          borderRadius: radius.full,
                           marginTop: 15,
                           backgroundColor: i <= stepIdx ? colors.brand : colors.chip,
                         }}
@@ -420,7 +430,7 @@ export default function JobScreen() {
                         style={{
                           width: 32,
                           height: 32,
-                          borderRadius: 16,
+                          borderRadius: radius.full,
                           backgroundColor: done ? colors.brand : colors.chip,
                           alignItems: "center",
                           justifyContent: "center",
@@ -484,42 +494,26 @@ export default function JobScreen() {
           ) : null}
         </Card>
 
-        {/* earnings (after completion) — from the real final price */}
-        {isDone && gross > 0 ? (
-          <Card style={{ gap: 10 }}>
-            <SectionHeader title={t("earningsForJob")} />
-            <View style={{ ...ROW, justifyContent: "space-between" }}>
-              <Text style={{ color: colors.muted, fontSize: 13.5 }}>{t("proFinalPriceTitle")}</Text>
-              <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: "700" }}>{formatPrice(gross)}</Text>
-            </View>
-            <View style={{ ...ROW, justifyContent: "space-between" }}>
-              <Text style={{ color: colors.muted, fontSize: 13.5 }}>{t("commission")}</Text>
-              <Text style={{ color: colors.danger, fontSize: 14.5, fontWeight: "700" }}>
-                -{formatPrice(commission)}
-              </Text>
-            </View>
-            <View style={{ height: 1, backgroundColor: colors.border }} />
-            <View style={{ ...ROW, justifyContent: "space-between" }}>
-              <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: "800" }}>{t("netAmount")}</Text>
-              <Text style={{ color: colors.success, fontSize: 18, fontWeight: "800" }}>{formatPrice(net)}</Text>
-            </View>
-          </Card>
-        ) : null}
-
-        {/* customer + contact */}
+        {/* ---------- the customer + how to reach them ---------- */}
         <Card style={{ gap: spacing.md }}>
           <SectionHeader title={t("customerTitle")} />
-          <View style={{ ...ROW, gap: 10 }}>
+          <View style={{ ...ROW, gap: spacing.md }}>
             <Avatar uri={booking.customer?.avatar_url} name={booking.customer?.full_name} size={46} />
-            <View style={{ flexShrink: 1 }}>
+            <View style={{ flex: 1, gap: 2 }}>
               <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 15, fontWeight: "800" }]}>
                 {booking.customer?.full_name ?? ""}
               </Text>
-              <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5 }]}>
-                {contactUnlocked
-                  ? phone ?? (phoneLoading ? t("loading") : t("proContactUnavailable"))
-                  : t("proContactLocked")}
-              </Text>
+              {contactUnlocked && phone ? (
+                <Text style={[LTR, { color: colors.muted, fontSize: 13.5, textAlign: "right" }]}>{phone}</Text>
+              ) : (
+                <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12.5, lineHeight: 18 }]}>
+                  {contactUnlocked
+                    ? phoneLoading
+                      ? t("loading")
+                      : t("proContactUnavailable")
+                    : t("proContactLocked")}
+                </Text>
+              )}
             </View>
           </View>
 
@@ -556,7 +550,7 @@ export default function JobScreen() {
           <Button title={t("proChatInApp")} variant="ghost" small icon="chat-outline" onPress={openChat} />
         </Card>
 
-        {/* details */}
+        {/* ---------- details ---------- */}
         <Card style={{ gap: spacing.md }}>
           <SectionHeader title={t("proDetailsTitle")} />
           {booking.title ? (
@@ -571,7 +565,11 @@ export default function JobScreen() {
           {booking.photos.length ? (
             <View style={{ ...ROW, gap: 8, flexWrap: "wrap" }}>
               {booking.photos.map((p, i) => (
-                <Pressable key={i} onPress={() => setViewerUri(p)}>
+                <Pressable
+                  key={i}
+                  onPress={() => setViewerUri(p)}
+                  style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.96 : 1 }] })}
+                >
                   <Image
                     source={{ uri: p }}
                     style={{ width: 74, height: 74, borderRadius: radius.md, backgroundColor: colors.chip }}
@@ -583,25 +581,26 @@ export default function JobScreen() {
           ) : null}
 
           {booking.address || booking.city ? (
-            <View style={{ ...ROW, gap: 6 }}>
-              <Ionicons name="location-outline" size={16} color={colors.brand} />
-              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 13.5, flexShrink: 1 }]}>
+            <View style={{ ...ROW, gap: 8, alignItems: "flex-start" }}>
+              <Ionicons name="location-outline" size={16} color={colors.brand} style={{ marginTop: 2 }} />
+              <Text style={[RTL_TEXT, { flex: 1, color: colors.text, fontSize: 13.5, lineHeight: 20 }]}>
                 {[booking.address, booking.city ? loc(booking.city, "name") : ""].filter(Boolean).join("، ")}
               </Text>
             </View>
           ) : null}
 
-          <View style={{ ...ROW, gap: 6 }}>
+          <View style={{ ...ROW, gap: 8 }}>
             <Ionicons name="time-outline" size={16} color={colors.brand} />
-            <Text style={[RTL_TEXT, { color: colors.text, fontSize: 13.5 }]}>
-              {t("proScheduleLabel")}: {booking.scheduled_at ? formatDateTime(booking.scheduled_at, lang) : t("proAsap")}
+            <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13.5 }]}>{t("proScheduleLabel")}</Text>
+            <Text style={[RTL_TEXT, { flex: 1, color: colors.text, fontSize: 13.5, fontWeight: "600" }]}>
+              {booking.scheduled_at ? formatDateTime(booking.scheduled_at, lang) : t("proAsap")}
             </Text>
           </View>
 
           {!isDone ? (
             <View style={{ ...ROW, gap: 8 }}>
               <Badge label={t("cash")} tone="gold" />
-              <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12, flexShrink: 1 }]}>
+              <Text style={[RTL_TEXT, { flex: 1, color: colors.faint, fontSize: 12, lineHeight: 18 }]}>
                 {t("proCashNote")}
               </Text>
             </View>
@@ -611,9 +610,35 @@ export default function JobScreen() {
             <Button title={t("navigate")} icon="navigation-variant" variant="outline" onPress={openMaps} />
           ) : null}
         </Card>
+
+        {/* ---------- earnings (after completion) — from the real final price ---------- */}
+        {isDone && gross > 0 ? (
+          <Card style={{ gap: 10 }}>
+            <SectionHeader title={t("earningsForJob")} />
+            <View style={{ ...ROW, justifyContent: "space-between" }}>
+              <Text style={{ color: colors.muted, fontSize: 13.5 }}>{t("proFinalPriceTitle")}</Text>
+              <Text style={[LTR, { color: colors.text, fontSize: 14.5, fontWeight: "700" }]}>
+                {formatPrice(gross)}
+              </Text>
+            </View>
+            <View style={{ ...ROW, justifyContent: "space-between" }}>
+              <Text style={{ color: colors.muted, fontSize: 13.5 }}>{t("commission")}</Text>
+              <Text style={[LTR, { color: colors.danger, fontSize: 14.5, fontWeight: "700" }]}>
+                {`−${formatPrice(commission)}`}
+              </Text>
+            </View>
+            <View style={{ height: 1, backgroundColor: colors.hairline }} />
+            <View style={{ ...ROW, justifyContent: "space-between" }}>
+              <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: "800" }}>{t("netAmount")}</Text>
+              <Text style={[LTR, { color: colors.success, fontSize: 20, fontWeight: "800" }]}>
+                {formatPrice(net)}
+              </Text>
+            </View>
+          </Card>
+        ) : null}
       </ScrollView>
 
-      {/* finish job — the final agreed price drives the ledger */}
+      {/* ---------- finish job — the final agreed price drives the ledger ---------- */}
       <Modal visible={finishOpen} transparent animationType="slide" onRequestClose={() => setFinishOpen(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
           <Pressable style={{ flex: 1, backgroundColor: colors.overlay }} onPress={() => setFinishOpen(false)} />
@@ -622,16 +647,18 @@ export default function JobScreen() {
               backgroundColor: colors.card,
               borderTopLeftRadius: radius.xl,
               borderTopRightRadius: radius.xl,
-              padding: spacing.xl,
+              padding: spacing.lg,
               paddingBottom: insets.bottom + spacing.xl,
               gap: spacing.lg,
             }}
           >
-            <View style={{ ...ROW, justifyContent: "space-between" }}>
-              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 17, fontWeight: "800" }]}>
+            <SheetHandle />
+
+            <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
+              <Text style={[RTL_TEXT, { flexShrink: 1, color: colors.text, fontSize: 18, fontWeight: "800" }]}>
                 {t("proFinalPriceTitle")}
               </Text>
-              <Pressable onPress={() => setFinishOpen(false)} hitSlop={8}>
+              <Pressable onPress={() => setFinishOpen(false)} hitSlop={10}>
                 <Ionicons name="close" size={22} color={colors.muted} />
               </Pressable>
             </View>
@@ -650,12 +677,13 @@ export default function JobScreen() {
                 setFinalPriceError(undefined);
               }}
               error={finalPriceError}
+              style={LTR}
             />
 
             {rangeLabel ? (
-              <View style={{ ...ROW, justifyContent: "space-between" }}>
+              <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
                 <Text style={{ color: colors.muted, fontSize: 12.5 }}>{t("quoteAgreedRange")}</Text>
-                <Text style={{ color: colors.text, fontSize: 13, fontWeight: "700" }}>{rangeLabel}</Text>
+                <Text style={[LTR, { color: colors.text, fontSize: 13, fontWeight: "700" }]}>{rangeLabel}</Text>
               </View>
             ) : null}
 
@@ -677,11 +705,12 @@ export default function JobScreen() {
             style={{
               position: "absolute",
               top: insets.top + 12,
-              left: 16,
+              // RTL: the close button sits on the start (right) edge
+              right: 16,
               zIndex: 2,
               width: 40,
               height: 40,
-              borderRadius: 20,
+              borderRadius: radius.full,
               backgroundColor: colors.card,
               alignItems: "center",
               justifyContent: "center",

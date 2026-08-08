@@ -1,5 +1,7 @@
 // Service finder — customers search the trade they need, not the person.
 // Picking a service starts a request; there is no professional directory.
+//
+// One input, one result surface. Nothing else competes with the search field.
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
@@ -20,7 +22,7 @@ import { useI18n } from "../lib/i18n";
 import { useAuth } from "../context/AuthContext";
 import { fetchCategories } from "../lib/refdata";
 import { ROW, RTL_TEXT } from "../lib/rtl";
-import { Button, EmptyState, Loading, SectionHeader, SkeletonList } from "../components/ui";
+import { Button, EmptyState, Loading, SheetHandle, SkeletonList, pressCard } from "../components/ui";
 import type { Category } from "../lib/types";
 
 /** icons come from the DB — never trust them blindly */
@@ -77,7 +79,7 @@ export function PickerSheet({
         justifyContent: "space-between",
         paddingVertical: 13,
         borderBottomWidth: 1,
-        borderBottomColor: colors.border,
+        borderBottomColor: colors.hairline,
       }}
     >
       <Text
@@ -107,21 +109,13 @@ export function PickerSheet({
             gap: spacing.md,
           }}
         >
-          <View
-            style={{
-              alignSelf: "center",
-              width: 40,
-              height: 4,
-              borderRadius: 2,
-              backgroundColor: colors.border,
-            }}
-          />
+          <SheetHandle />
           <Text style={[RTL_TEXT, { color: colors.text, fontSize: 17, fontWeight: "800" }]}>{title}</Text>
           {searchable ? (
             <View
               style={{
                 ...ROW,
-                gap: 8,
+                gap: spacing.sm,
                 backgroundColor: colors.chip,
                 borderRadius: radius.full,
                 paddingHorizontal: 14,
@@ -218,7 +212,8 @@ export default function SearchScreen() {
       key={cat.id}
       onPress={() => start(cat.id)}
       style={({ pressed }) => [
-        { width: tileW, alignItems: "center", gap: 7, transform: [{ scale: pressed ? 0.95 : 1 }] },
+        { width: tileW, alignItems: "center", gap: spacing.sm },
+        pressed ? pressCard : null,
       ]}
     >
       <View
@@ -234,9 +229,18 @@ export default function SearchScreen() {
       >
         <MaterialCommunityIcons name={safeIcon(cat.icon)} size={26} color={colors.brand} />
       </View>
+      {/* fixed two-line height so every row of tiles lines up */}
       <Text
         numberOfLines={2}
-        style={{ color: colors.text, fontSize: 11.5, fontWeight: "600", textAlign: "center", minHeight: 30 }}
+        style={{
+          color: colors.text,
+          fontSize: 11.5,
+          fontWeight: "600",
+          textAlign: "center",
+          writingDirection: "rtl",
+          lineHeight: 16,
+          height: 32,
+        }}
       >
         {loc(cat, "name")}
       </Text>
@@ -250,64 +254,55 @@ export default function SearchScreen() {
       style={({ pressed }) => [
         {
           ...ROW,
-          gap: 12,
+          gap: spacing.md,
           backgroundColor: colors.card,
           borderRadius: radius.lg,
           padding: spacing.md,
           ...shadows.card,
-          transform: [{ scale: pressed ? 0.98 : 1 }],
         },
+        pressed ? pressCard : null,
       ]}
     >
       <View
         style={{
-          width: 46,
-          height: 46,
+          width: 44,
+          height: 44,
           borderRadius: radius.tile,
           backgroundColor: colors.brandTint,
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <MaterialCommunityIcons name={safeIcon(cat.icon)} size={24} color={colors.brand} />
+        <MaterialCommunityIcons name={safeIcon(cat.icon)} size={22} color={colors.brand} />
       </View>
       <Text numberOfLines={1} style={[RTL_TEXT, { flex: 1, color: colors.text, fontSize: 15.5, fontWeight: "800" }]}>
         {loc(cat, "name")}
       </Text>
+      {/* last child = visual left; "chevron-back" points left = forward in RTL */}
       <Ionicons name="chevron-back" size={16} color={colors.faint} />
     </Pressable>
   );
 
+  const refresh = (
+    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} colors={[colors.brand]} />
+  );
+
   const body = () => {
-    if (loading) return <SkeletonList count={5} />;
+    if (loading) return <SkeletonList count={4} />;
 
     if (error) {
       return (
         <ScrollView
           contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: spacing.lg, gap: spacing.md }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} colors={[colors.brand]} />
-          }
+          refreshControl={refresh}
         >
-          <View style={{ backgroundColor: colors.dangerTint, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.md }}>
-            <View style={{ ...ROW, gap: 10 }}>
-              <MaterialCommunityIcons name="cloud-off-outline" size={26} color={colors.danger} />
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 15, fontWeight: "800" }]}>
-                  {t("searchErrorTitle")}
-                </Text>
-                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, lineHeight: 18 }]}>
-                  {t("searchErrorSubtitle")}
-                </Text>
-              </View>
-            </View>
-            <Button title={t("retry")} icon="refresh" onPress={onRefresh} />
-          </View>
+          <EmptyState icon="cloud-off-outline" title={t("searchErrorTitle")} subtitle={t("searchErrorSubtitle")} />
+          <Button title={t("retry")} icon="refresh" onPress={onRefresh} />
         </ScrollView>
       );
     }
 
-    // nothing typed → the whole catalogue as a grid
+    // nothing typed → the whole catalogue as a grid, no headings competing
     if (!needle) {
       return (
         <ScrollView
@@ -319,21 +314,16 @@ export default function SearchScreen() {
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} colors={[colors.brand]} />
-          }
+          refreshControl={refresh}
         >
-          <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, marginBottom: spacing.md }]}>
-            {t("searchServicesSubtitle")}
-          </Text>
-          <SectionHeader title={t("categories")} />
           {cats.length === 0 ? (
             <EmptyState icon="shape-outline" title={t("homeNoServices")} />
           ) : (
             <View
               style={{
-                flexDirection: "row-reverse",
+                flexDirection: "row-reverse", // fills from the right
                 flexWrap: "wrap",
+                alignItems: "flex-start",
                 columnGap: spacing.md,
                 rowGap: spacing.lg,
               }}
@@ -357,9 +347,7 @@ export default function SearchScreen() {
         }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} colors={[colors.brand]} />
-        }
+        refreshControl={refresh}
       >
         {results.length > 0 ? (
           <>
@@ -384,42 +372,45 @@ export default function SearchScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      {/* header: back + service search input */}
+      {/* header: back (visual right) + the one input */}
       <View
         style={{
           paddingTop: insets.top + spacing.sm,
           paddingHorizontal: spacing.lg,
-          paddingBottom: spacing.sm,
+          paddingBottom: spacing.md,
           ...ROW,
-          gap: 10,
+          gap: spacing.sm,
         }}
       >
         <Pressable
           onPress={() => router.back()}
           hitSlop={8}
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            backgroundColor: colors.card,
-            alignItems: "center",
-            justifyContent: "center",
-            ...shadows.card,
-          }}
+          style={({ pressed }) => [
+            {
+              width: 40,
+              height: 40,
+              borderRadius: radius.full,
+              backgroundColor: colors.card,
+              alignItems: "center",
+              justifyContent: "center",
+              ...shadows.card,
+            },
+            pressed ? pressCard : null,
+          ]}
         >
+          {/* RTL back points right */}
           <Ionicons name="arrow-forward" size={20} color={colors.text} />
         </Pressable>
+
         <View
           style={{
             flex: 1,
             ...ROW,
-            gap: 8,
+            gap: spacing.sm,
             backgroundColor: colors.card,
             borderRadius: radius.full,
-            paddingHorizontal: 16,
+            paddingHorizontal: spacing.lg,
             paddingVertical: 10,
-            borderWidth: 1,
-            borderColor: colors.border,
             ...shadows.card,
           }}
         >

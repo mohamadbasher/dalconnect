@@ -1,36 +1,47 @@
 import React from "react";
-import { Pressable, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { Tabs, Redirect, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useTheme } from "../../lib/theme";
+import { useTheme, radius } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { TopBar } from "../../components/TopBar";
 import { Loading } from "../../components/ui";
 
-// Center orange action button: shortcut to create an open ("urgent") request.
-function UrgentTabButton() {
+/**
+ * Center action: post a new request.
+ *
+ * It deliberately sits in the middle of the bar rather than at an edge — it is
+ * the one thing every customer is here to do.
+ */
+function NewRequestButton() {
   const { colors, shadows } = useTheme();
+  const { t } = useI18n();
   const router = useRouter();
   return (
-    <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+    <View style={{ flex: 1, alignItems: "center" }}>
       <Pressable
         onPress={() => router.push("/create-booking")}
+        accessibilityRole="button"
+        accessibilityLabel={t("tabUrgent")}
+        hitSlop={8}
         style={({ pressed }) => ({
-          top: -16,
-          width: 58,
-          height: 58,
-          borderRadius: 29,
+          top: -18,
+          width: 62,
+          height: 62,
+          borderRadius: 31,
           backgroundColor: colors.brand,
           alignItems: "center",
           justifyContent: "center",
-          borderWidth: 4,
+          // a ring in the bar's own colour so the button reads as floating
+          borderWidth: 5,
           borderColor: colors.card,
-          transform: [{ scale: pressed ? 0.94 : 1 }],
+          transform: [{ scale: pressed ? 0.93 : 1 }],
           ...shadows.cta,
         })}
       >
-        <MaterialCommunityIcons name="flash" size={28} color="#ffffff" />
+        <MaterialCommunityIcons name="plus" size={30} color="#ffffff" />
       </Pressable>
     </View>
   );
@@ -40,15 +51,21 @@ export default function TabsLayout() {
   const { colors, shadows } = useTheme();
   const { t } = useI18n();
   const { session, loading, mode } = useAuth();
+  const insets = useSafeAreaInsets();
 
   if (loading) return <Loading />;
   if (!session) return <Redirect href="/(auth)/welcome" />;
 
   const proMode = mode === "pro";
+
   const icon =
     (name: keyof typeof Ionicons.glyphMap, focusedName: keyof typeof Ionicons.glyphMap) =>
-    ({ color, focused }: { color: string; focused: boolean }) =>
-      <Ionicons name={focused ? focusedName : name} size={23} color={color} />;
+    ({ color, focused }: { color: string; focused: boolean }) => (
+      <Ionicons name={focused ? focusedName : name} size={25} color={color} />
+    );
+
+  // Room for the labels plus whatever the phone reserves for its home indicator.
+  const barHeight = 64 + insets.bottom;
 
   return (
     <Tabs
@@ -59,55 +76,43 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: colors.card,
           borderTopWidth: 0,
-          height: 62,
-          paddingBottom: 8,
-          paddingTop: 6,
-          // The tab bar doesn't know about our manual RTL convention — reverse
-          // it explicitly so the first tab (home) sits on the right, like the
-          // rest of the RTL app.
-          flexDirection: "row-reverse",
-          ...shadows.float,
+          height: barHeight,
+          paddingBottom: insets.bottom + 8,
+          paddingTop: 8,
+          ...shadows.floatUp,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "700" },
+        // NOTE: the bar is laid out left-to-right on purpose. Reversing it with
+        // `flexDirection: row-reverse` moves the labels but NOT the touch
+        // targets, so taps land on the wrong tab. The RTL order is achieved by
+        // declaring the screens in reverse instead — see below.
+        tabBarLabelStyle: { fontSize: 11.5, fontWeight: "700", marginTop: 2 },
+        tabBarItemStyle: { paddingVertical: 4 },
+        tabBarHideOnKeyboard: Platform.OS === "android",
       }}
     >
-      {/* --- customer tabs (RTL: first declared = rightmost) --- */}
+      {/* Declared LEFT-to-RIGHT, so the list below reads as the mirror of what
+          the user sees: the LAST entry is the right-most (primary) tab. */}
+
+      {/* --- shared, left edge --- */}
       <Tabs.Screen
-        name="index"
-        options={{
-          title: t("tabHome"),
-          tabBarIcon: icon("home-outline", "home"),
-          href: proMode ? null : "/(tabs)",
-        }}
+        name="profile"
+        options={{ title: t("tabProfile"), tabBarIcon: icon("person-outline", "person") }}
       />
       <Tabs.Screen
-        name="bookings"
+        name="chat"
         options={{
-          title: t("tabBookings"),
-          tabBarIcon: icon("clipboard-outline", "clipboard"),
-          href: proMode ? null : "/(tabs)/bookings",
-        }}
-      />
-      {/* Center new-request action (customer only).
-          `href` and `tabBarButton` are mutually exclusive in expo-router — the
-          button itself handles both the navigation and the pro-mode hiding. */}
-      <Tabs.Screen
-        name="urgent"
-        options={{
-          title: "",
-          // hide the slot entirely in pro mode so it leaves no empty gap
-          tabBarItemStyle: proMode ? { display: "none" } : undefined,
-          tabBarButton: () => (proMode ? null : <UrgentTabButton />),
+          title: t("tabChat"),
+          tabBarIcon: icon("chatbubble-ellipses-outline", "chatbubble-ellipses"),
         }}
       />
 
-      {/* --- professional tabs --- */}
+      {/* --- professional --- */}
       <Tabs.Screen
-        name="dashboard"
+        name="earnings"
         options={{
-          title: t("tabDashboard"),
-          tabBarIcon: icon("flash-outline", "flash"),
-          href: proMode ? "/(tabs)/dashboard" : null,
+          title: t("tabEarnings"),
+          tabBarIcon: icon("wallet-outline", "wallet"),
+          href: proMode ? "/(tabs)/earnings" : null,
         }}
       />
       <Tabs.Screen
@@ -118,28 +123,42 @@ export default function TabsLayout() {
           href: proMode ? "/(tabs)/jobs" : null,
         }}
       />
+
+      {/* --- customer: centre action --- */}
       <Tabs.Screen
-        name="earnings"
+        name="urgent"
         options={{
-          title: t("tabEarnings"),
-          tabBarIcon: icon("wallet-outline", "wallet"),
-          href: proMode ? "/(tabs)/earnings" : null,
+          title: "",
+          tabBarItemStyle: proMode ? { display: "none" } : undefined,
+          // `href` and `tabBarButton` are mutually exclusive in expo-router, so
+          // this button does its own navigation.
+          tabBarButton: () => (proMode ? null : <NewRequestButton />),
         }}
       />
 
-      {/* --- shared tabs --- */}
+      {/* --- right edge: the screen each role lands on --- */}
       <Tabs.Screen
-        name="chat"
+        name="dashboard"
         options={{
-          title: t("tabChat"),
-          tabBarIcon: icon("chatbubble-ellipses-outline", "chatbubble-ellipses"),
+          title: t("tabDashboard"),
+          tabBarIcon: icon("flash-outline", "flash"),
+          href: proMode ? "/(tabs)/dashboard" : null,
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="bookings"
         options={{
-          title: t("tabProfile"),
-          tabBarIcon: icon("person-outline", "person"),
+          title: t("tabBookings"),
+          tabBarIcon: icon("clipboard-outline", "clipboard"),
+          href: proMode ? null : "/(tabs)/bookings",
+        }}
+      />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: t("tabHome"),
+          tabBarIcon: icon("home-outline", "home"),
+          href: proMode ? null : "/(tabs)",
         }}
       />
     </Tabs>

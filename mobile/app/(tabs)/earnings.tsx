@@ -1,7 +1,7 @@
-// Pro earnings tab — stats tiles, commission summary, month-grouped transaction ledger.
+// Pro earnings tab — one summary card, the 7-day graph, commission note, ledger.
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, RefreshControl, Text, View } from "react-native";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { FlatList, RefreshControl, Text, TextStyle, View } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useTheme, radius, spacing, formatPrice } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
@@ -11,6 +11,9 @@ import { ROW, RTL_TEXT } from "../../lib/rtl";
 import { Button, Card, EmptyState, SectionHeader, SkeletonList } from "../../components/ui";
 import { EarningsBarGraph, type EarningsBar } from "../../components/EarningsBarGraph";
 import type { Transaction } from "../../lib/types";
+
+/** Shekel amounts are Latin digits — keep them LTR inside the RTL layout. */
+const LTR: TextStyle = { writingDirection: "ltr" };
 
 type Row =
   | { type: "month"; key: string; label: string }
@@ -107,7 +110,15 @@ export default function EarningsScreen() {
 
   if (!isPro || !professional || !uid) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: "center", padding: spacing.lg }}>
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: colors.bg,
+          justifyContent: "center",
+          padding: spacing.lg,
+          gap: spacing.lg,
+        }}
+      >
         <EmptyState icon="briefcase-outline" title={t("proGateTitle")} subtitle={t("proGateSubtitle")} />
         <Button title={t("proGateCta")} icon="briefcase-plus" onPress={() => router.push("/become-pro")} />
       </View>
@@ -116,53 +127,60 @@ export default function EarningsScreen() {
 
   if (loading) return <SkeletonList count={4} />;
 
-  const StatTile = ({
-    label,
-    value,
-    icon,
-    big,
-  }: {
-    label: string;
-    value: string;
-    icon: keyof typeof MaterialCommunityIcons.glyphMap;
-    big?: boolean;
-  }) => (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: colors.card,
-        borderRadius: radius.lg,
-        paddingVertical: spacing.lg,
-        paddingHorizontal: spacing.sm,
-        gap: 5,
-        alignItems: "center",
-        ...shadows.card,
-        ...(big ? { borderWidth: 1.5, borderColor: colors.brandTint } : null),
-      }}
-    >
-      <MaterialCommunityIcons name={icon} size={16} color={big ? colors.brand : colors.muted} />
-      <Text
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        style={{ color: big ? colors.brand : colors.text, fontSize: big ? 22 : 19, fontWeight: "800" }}
-      >
-        {value}
-      </Text>
-      <Text numberOfLines={1} style={{ color: colors.muted, fontSize: 11, fontWeight: "600", textAlign: "center" }}>
-        {label}
-      </Text>
-    </View>
-  );
-
   const header = (
     <View style={{ gap: spacing.lg, marginBottom: spacing.md }}>
+      {/* ---------- the number that matters, then two quiet ones ---------- */}
+      <Card style={{ padding: 0, overflow: "hidden" }}>
+        <View style={{ alignItems: "center", gap: 4, paddingVertical: spacing.xl }}>
+          <Text style={{ color: colors.muted, fontSize: 13, fontWeight: "600" }}>{t("totalNet")}</Text>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            style={[LTR, { color: colors.brand, fontSize: 34, fontWeight: "800" }]}
+          >
+            {formatPrice(totalNet)}
+          </Text>
+        </View>
+        <View style={{ ...ROW, borderTopWidth: 1, borderTopColor: colors.hairline }}>
+          {[
+            { key: "month", label: t("thisMonthNet"), value: formatPrice(monthNet) },
+            { key: "jobs", label: t("jobsCompleted"), value: String(jobsCompleted) },
+          ].map((s, i) => (
+            <View
+              key={s.key}
+              style={{
+                flex: 1,
+                alignItems: "center",
+                gap: 3,
+                paddingVertical: spacing.md,
+                borderLeftWidth: i === 0 ? 1 : 0,
+                borderLeftColor: colors.hairline,
+              }}
+            >
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                style={[LTR, { color: colors.text, fontSize: 17, fontWeight: "800" }]}
+              >
+                {s.value}
+              </Text>
+              <Text numberOfLines={1} style={{ color: colors.muted, fontSize: 11.5, fontWeight: "600" }}>
+                {s.label}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </Card>
+
+      {/* ---------- last 7 days ---------- */}
       {txs.length ? (
         <Card style={{ gap: spacing.md }}>
           <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
             <Text style={[RTL_TEXT, { color: colors.text, fontSize: 15, fontWeight: "800" }]}>
               {t("last7DaysTitle")}
             </Text>
-            <Text style={{ color: colors.brand, fontSize: 13.5, fontWeight: "800" }}>
+            {/* "المجموع: ₪1,234" — Arabic label with a Latin amount: RTL text, LTR digit run */}
+            <Text style={[RTL_TEXT, { color: colors.brand, fontSize: 13.5, fontWeight: "800" }]}>
               {t("last7DaysTotal", { amount: formatPrice(weekTotal) })}
             </Text>
           </View>
@@ -170,25 +188,33 @@ export default function EarningsScreen() {
         </Card>
       ) : null}
 
-      <View style={{ ...ROW, gap: spacing.md, alignItems: "stretch" }}>
-        <StatTile label={t("totalNet")} value={formatPrice(totalNet)} icon="cash-multiple" big />
-        <StatTile label={t("thisMonthNet")} value={formatPrice(monthNet)} icon="calendar-month-outline" />
-        <StatTile label={t("jobsCompleted")} value={String(jobsCompleted)} icon="check-decagram-outline" />
-      </View>
-
       {txs.length > 0 && monthTxCount === 0 ? (
-        <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12 }]}>{t("noEarningsThisMonth")}</Text>
+        <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12.5, lineHeight: 19 }]}>
+          {t("noEarningsThisMonth")}
+        </Text>
       ) : null}
 
-      <Card style={{ gap: 6 }}>
-        <View style={{ ...ROW, gap: 8 }}>
-          <MaterialCommunityIcons name="bank-outline" size={18} color={colors.warn} />
-          <Text style={[RTL_TEXT, { color: colors.text, fontSize: 13.5, fontWeight: "700", flexShrink: 1 }]}>
+      {/* ---------- commission owed — a quiet tint strip, not another boxed card ---------- */}
+      <View
+        style={{
+          ...ROW,
+          gap: 10,
+          alignItems: "flex-start",
+          backgroundColor: colors.warnTint,
+          borderRadius: radius.md,
+          padding: spacing.md,
+        }}
+      >
+        <MaterialCommunityIcons name="bank-outline" size={18} color={colors.warn} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[RTL_TEXT, { color: colors.warn, fontSize: 13.5, fontWeight: "700" }]}>
             {t("commissionOwed", { amount: formatPrice(totalCommission) })}
           </Text>
+          <Text style={[RTL_TEXT, { color: colors.warn, fontSize: 12, opacity: 0.85 }]}>
+            {t("commissionExplainer")}
+          </Text>
         </View>
-        <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12 }]}>{t("commissionExplainer")}</Text>
-      </Card>
+      </View>
 
       {rows.length ? <SectionHeader title={t("historyTitle")} /> : null}
     </View>
@@ -201,6 +227,7 @@ export default function EarningsScreen() {
         keyExtractor={(r) => r.key}
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl, flexGrow: 1 }}
         ListHeaderComponent={header}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={<EmptyState icon="cash-multiple" title={t("noEarnings")} subtitle={t("noEarningsHint")} />}
         renderItem={({ item }) => {
           if (item.type === "month") {
@@ -231,16 +258,16 @@ export default function EarningsScreen() {
                 borderRadius: radius.lg,
                 padding: spacing.md,
                 marginBottom: spacing.sm,
-                gap: 6,
+                gap: 8,
                 ...shadows.card,
               }}
             >
               <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
-                <View style={{ ...ROW, gap: 8, flexShrink: 1 }}>
+                <View style={{ ...ROW, gap: 10, flexShrink: 1 }}>
                   <View
                     style={{
-                      width: 34,
-                      height: 34,
+                      width: 36,
+                      height: 36,
                       borderRadius: radius.md,
                       backgroundColor: colors.brandTint,
                       alignItems: "center",
@@ -249,8 +276,11 @@ export default function EarningsScreen() {
                   >
                     <MaterialCommunityIcons name={(cat?.icon as any) ?? "tools"} size={18} color={colors.brand} />
                   </View>
-                  <View style={{ flexShrink: 1 }}>
-                    <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 13.5, fontWeight: "700" }]}>
+                  <View style={{ flexShrink: 1, gap: 2 }}>
+                    <Text
+                      numberOfLines={1}
+                      style={[RTL_TEXT, { color: colors.text, fontSize: 14, fontWeight: "700" }]}
+                    >
                       {title}
                     </Text>
                     <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 11.5 }]}>
@@ -262,18 +292,25 @@ export default function EarningsScreen() {
                     </Text>
                   </View>
                 </View>
-                <Text style={{ color: colors.success, fontSize: 16, fontWeight: "800" }}>
+                <Text style={[LTR, { color: colors.success, fontSize: 16, fontWeight: "800" }]}>
                   {formatPrice(tx.net)}
                 </Text>
               </View>
-              <View style={{ ...ROW, justifyContent: "flex-start", gap: 12 }}>
-                <View style={{ ...ROW, gap: 4 }}>
-                  <Ionicons name="cash-outline" size={12} color={colors.faint} />
-                  <Text style={{ color: colors.faint, fontSize: 11.5 }}>{formatPrice(tx.amount)}</Text>
+
+              {/* gross and the platform's cut, kept quiet under the net figure */}
+              <View style={{ ...ROW, gap: 14, flexWrap: "wrap" }}>
+                <View style={{ ...ROW, gap: 5 }}>
+                  <Text style={{ color: colors.faint, fontSize: 11.5 }}>{t("grossAmount")}</Text>
+                  <Text style={[LTR, { color: colors.muted, fontSize: 11.5, fontWeight: "600" }]}>
+                    {formatPrice(tx.amount)}
+                  </Text>
                 </View>
-                <Text style={{ color: colors.faint, fontSize: 11.5 }}>
-                  {t("commission")}: -{formatPrice(tx.commission)}
-                </Text>
+                <View style={{ ...ROW, gap: 5 }}>
+                  <Text style={{ color: colors.faint, fontSize: 11.5 }}>{t("commission")}</Text>
+                  <Text style={[LTR, { color: colors.muted, fontSize: 11.5, fontWeight: "600" }]}>
+                    {`−${formatPrice(tx.commission)}`}
+                  </Text>
+                </View>
               </View>
             </View>
           );

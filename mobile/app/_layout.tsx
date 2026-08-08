@@ -56,6 +56,11 @@ function Root() {
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: colors.bg },
+          // The app is Arabic/Hebrew only. We keep the native base direction
+          // LTR (so our explicit row-reverse layouts stay predictable), but a
+          // pushed screen must still arrive from the left like the rest of an
+          // RTL interface — otherwise navigation feels backwards.
+          animation: "slide_from_left",
         }}
       />
       {/* Sibling above the stack: the animated splash covers the app while the

@@ -1,4 +1,7 @@
-// Booking card — used by the customer bookings tab and the pro jobs tab.
+// Booking card — one clean row, used by the customer bookings tab and the pro
+// jobs tab. Two lines only: identity on top (icon · title · counterpart · status)
+// and a meta line underneath (urgency · time · money), so a long title never has
+// to fight the badges for room.
 import React from "react";
 import { Pressable, Text, View } from "react-native";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
@@ -8,7 +11,13 @@ import { useI18n } from "../lib/i18n";
 import { formatTime, STATUS_KEY, STATUS_TONE } from "../lib/format";
 import { ROW, RTL_TEXT } from "../lib/rtl";
 import { Badge } from "./ui";
-import type { Booking } from "../lib/types";
+import { MONEY_TEXT } from "./OfferCard";
+import type { Booking, BookingStatus } from "../lib/types";
+
+type MCIName = keyof typeof MaterialCommunityIcons.glyphMap;
+
+/** Urgency only means something while the job is still ahead of you. */
+const URGENCY_RELEVANT: BookingStatus[] = ["open", "pending", "accepted", "on_the_way", "in_progress"];
 
 export function BookingCard({
   booking,
@@ -52,88 +61,89 @@ export function BookingCard({
           : "";
 
   const isUrgent = booking.urgency === "same_day";
+  const showUrgency = URGENCY_RELEVANT.includes(booking.status);
+  const title = booking.category ? loc(booking.category, "name") : booking.title || t("category");
+  // Until somebody is attached there is no name to show, so the job's own words
+  // stand in — an open request with a blank second line reads as broken.
+  const subtitle = otherName || booking.description || "";
 
   return (
     <Pressable
-      onPress={() => router.push((href ?? `/booking/${booking.id}`) as any)}
+      onPress={() => router.push((href ?? `/booking/${booking.id}`) as never)}
       style={({ pressed }) => [
         {
           backgroundColor: colors.card,
           borderRadius: radius.lg,
           padding: spacing.lg,
-          gap: 8,
+          gap: 10,
           ...shadows.card,
           transform: [{ scale: pressed ? 0.98 : 1 }],
+          opacity: pressed ? 0.9 : 1,
         },
       ]}
     >
-      <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
-        <View style={{ ...ROW, gap: 8, flexShrink: 1 }}>
-          <View
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: radius.md,
-              backgroundColor: colors.brandTint,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <MaterialCommunityIcons
-              name={(booking.category?.icon as any) ?? "tools"}
-              size={20}
-              color={colors.brand}
-            />
-          </View>
-          <View style={{ flexShrink: 1 }}>
-            <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 14.5, fontWeight: "800" }]}>
-              {booking.category ? loc(booking.category, "name") : booking.title || t("category")}
-            </Text>
-            {otherName ? (
-              <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.muted, fontSize: 12 }]}>
-                {otherName}
-              </Text>
-            ) : null}
-          </View>
+      <View style={{ ...ROW, gap: 10 }}>
+        <View
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: radius.md,
+            backgroundColor: colors.brandTint,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <MaterialCommunityIcons
+            name={(booking.category?.icon as MCIName) ?? "tools"}
+            size={21}
+            color={colors.brand}
+          />
         </View>
-        <View style={{ alignItems: "flex-start", gap: 4 }}>
-          <Badge label={t(STATUS_KEY[booking.status])} tone={STATUS_TONE[booking.status]} />
-          {/* how soon it was asked for — urgent jobs have to be spottable at a glance */}
-          <View
-            style={{
-              ...ROW,
-              gap: 5,
-              backgroundColor: isUrgent ? colors.warnTint : colors.chip,
-              borderRadius: radius.full,
-              paddingHorizontal: 10,
-              paddingVertical: 3,
-            }}
-          >
-            <MaterialCommunityIcons
-              name={isUrgent ? "flash" : "calendar-clock"}
-              size={12}
-              color={isUrgent ? colors.warn : colors.muted}
-            />
-            <Text style={{ color: isUrgent ? colors.warn : colors.muted, fontSize: 11, fontWeight: "700" }}>
-              {t(isUrgent ? "urgencyUrgentTag" : "urgencyScheduledTag")}
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 15, fontWeight: "800" }]}>
+            {title}
+          </Text>
+          {subtitle ? (
+            <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5 }]}>
+              {subtitle}
             </Text>
-          </View>
+          ) : null}
         </View>
+        <Badge label={t(STATUS_KEY[booking.status])} tone={STATUS_TONE[booking.status]} />
       </View>
 
-      {booking.description ? (
-        <Text numberOfLines={2} style={[RTL_TEXT, { color: colors.muted, fontSize: 13 }]}>
-          {booking.description}
-        </Text>
-      ) : null}
-
-      <View style={{ ...ROW, justifyContent: "space-between" }}>
-        <View style={{ ...ROW, gap: 4 }}>
-          <Ionicons name="time-outline" size={13} color={colors.faint} />
-          <Text style={{ color: colors.faint, fontSize: 12 }}>{formatTime(booking.created_at, lang)}</Text>
+      <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
+        <View style={{ ...ROW, gap: 8, flexShrink: 1 }}>
+          {showUrgency ? (
+            <View
+              style={{
+                ...ROW,
+                gap: 4,
+                backgroundColor: isUrgent ? colors.warnTint : colors.chip,
+                borderRadius: radius.full,
+                paddingHorizontal: 9,
+                paddingVertical: 3,
+              }}
+            >
+              <MaterialCommunityIcons
+                name={isUrgent ? "flash" : "calendar-clock"}
+                size={11}
+                color={isUrgent ? colors.warn : colors.muted}
+              />
+              <Text style={{ color: isUrgent ? colors.warn : colors.muted, fontSize: 11, fontWeight: "700" }}>
+                {t(isUrgent ? "urgencyUrgentTag" : "urgencyScheduledTag")}
+              </Text>
+            </View>
+          ) : null}
+          <View style={{ ...ROW, gap: 4 }}>
+            <Ionicons name="time-outline" size={12} color={colors.faint} />
+            <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.faint, fontSize: 12 }]}>
+              {formatTime(booking.created_at, lang)}
+            </Text>
+          </View>
         </View>
         {moneyText ? (
-          <Text style={{ color: colors.brand, fontSize: 15, fontWeight: "800" }}>{moneyText}</Text>
+          <Text style={[MONEY_TEXT, { color: colors.brand, fontSize: 15, fontWeight: "800" }]}>{moneyText}</Text>
         ) : null}
       </View>
     </Pressable>

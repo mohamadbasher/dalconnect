@@ -1,38 +1,20 @@
 import type { Dict } from "../index";
 
-// Customer home (service picker) / service search / category / pro-profile / favorites strings.
+// Customer home (service picker) / service search / category / pro-profile strings.
 export const home: Dict = {
   // ----- home -----
-  homeGreeting: { ar: "أهلاً {name} 👋", he: "אהלן {name} 👋" },
+  // The service grid's own heading — the screen carries exactly one.
   homeSubtitle: { ar: "شو بتحتاج اليوم؟", he: "מה אתם צריכים היום?" },
   homeSearchPlaceholder: { ar: "شو الخدمة اللي بتدوّر عليها؟", he: "איזה שירות אתם מחפשים?" },
-  homeServicesTitle: { ar: "الخدمات", he: "השירותים" },
   homeServicesSubtitle: {
-    ar: "اختر الخدمة، احكِ لنا شو بتحتاج، وبنوصل طلبك لكل المهنيين القريبين منك",
-    he: "בחרו שירות, ספרו לנו מה צריך, ונעביר את הבקשה לכל בעלי המקצוע באזורכם",
+    ar: "اختر الخدمة وبنوصّل طلبك لكل المهنيين القريبين منك",
+    he: "בחרו שירות ונעביר את הבקשה לכל בעלי המקצוע באזורכם",
   },
   homeNoServices: { ar: "لا توجد خدمات متاحة حالياً", he: "אין שירותים זמינים כרגע" },
-  homeCtaTitle: { ar: "بحاجة لشي مستعجل؟", he: "צריכים משהו דחוף?" },
-  homeCtaSubtitle: {
-    ar: "أنشئ طلباً واستقبل عروض أسعار من المهنيين القريبين منك",
-    he: "צרו בקשה וקבלו הצעות מחיר מבעלי מקצוע באזורכם",
-  },
-  homeCtaButton: { ar: "أنشئ طلباً الآن", he: "צרו בקשה עכשיו" },
-  homeActiveRequest: { ar: "طلبك الحالي", he: "הבקשה הפעילה שלכם" },
   homeOffersCount: { ar: "عروض الأسعار: {count}", he: "הצעות מחיר: {count}" },
-
-  // ----- favorites -----
-  favEmptyTitle: { ar: "لا مفضلات بعد", he: "אין עדיין מועדפים" },
-  favEmptySubtitle: {
-    ar: "اضغط على القلب في صفحة أي مهني لتجده هنا بسرعة",
-    he: "לחצו על הלב בעמוד של בעל מקצוע כדי למצוא אותו כאן במהירות",
-  },
+  homeTrackRequest: { ar: "اضغط لمتابعة طلبك", he: "לחצו למעקב אחרי הבקשה" },
 
   // ----- service search -----
-  searchServicesSubtitle: {
-    ar: "اختر الخدمة اللي بتحتاجها وبنجيب لك عروض أسعار",
-    he: "בחרו את השירות שאתם צריכים ונביא לכם הצעות מחיר",
-  },
   searchServicesCount: { ar: "{count} خدمة", he: "{count} שירותים" },
   searchNoServiceTitle: { ar: "ما لقينا خدمة بهذا الاسم", he: "לא מצאנו שירות בשם הזה" },
   searchNoServiceSubtitle: {

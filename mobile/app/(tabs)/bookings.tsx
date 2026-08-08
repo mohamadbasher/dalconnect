@@ -8,10 +8,10 @@ import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { channelTopic } from "../../lib/realtime";
-import { ROW } from "../../lib/rtl";
+import { ROW, RTL_TEXT } from "../../lib/rtl";
 import { BookingCard } from "../../components/BookingCard";
 import { Button, EmptyState, Skeleton, SkeletonList } from "../../components/ui";
-import type { Booking, BookingStatus, BookingUrgency } from "../../lib/types";
+import type { Booking, BookingStatus } from "../../lib/types";
 
 type Segment = "active" | "done" | "cancelled";
 
@@ -34,7 +34,10 @@ function segmentOf(status: BookingStatus): Segment {
   }
 }
 
-/** segment chip with a count badge (Chip from ui.tsx has no badge slot) */
+/**
+ * Segment chip with a count badge (Chip from ui.tsx has no badge slot).
+ * An empty bucket shows no badge at all — a row of grey zeroes is noise.
+ */
 function SegChip({
   label,
   count,
@@ -61,21 +64,23 @@ function SegChip({
       })}
     >
       <Text style={{ color: active ? colors.onBrand : colors.text, fontSize: 13, fontWeight: "600" }}>{label}</Text>
-      <View
-        style={{
-          minWidth: 20,
-          height: 20,
-          paddingHorizontal: 5,
-          borderRadius: 10,
-          backgroundColor: active ? colors.brandDark : colors.card,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Text style={{ color: active ? colors.onBrand : colors.muted, fontSize: 11, fontWeight: "700" }}>
-          {count}
-        </Text>
-      </View>
+      {count > 0 ? (
+        <View
+          style={{
+            minWidth: 20,
+            height: 20,
+            paddingHorizontal: 5,
+            borderRadius: radius.full,
+            backgroundColor: active ? colors.brandDark : colors.card,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ color: active ? colors.onBrand : colors.muted, fontSize: 11, fontWeight: "800" }}>
+            {count}
+          </Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -177,11 +182,12 @@ export default function BookingsTab() {
       <FlatList
         data={filtered}
         keyExtractor={(b) => b.id}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md, flexGrow: 1 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
         renderItem={({ item }) => <BookingCard booking={item} perspective="customer" />}
         ListEmptyComponent={
-          <View style={{ flex: 1, justifyContent: "center" }}>
+          <View style={{ flex: 1, justifyContent: "center", gap: spacing.md }}>
             <EmptyState
               icon="clipboard-text-outline"
               title={emptyTitle}
@@ -196,6 +202,24 @@ export default function BookingsTab() {
               />
             ) : null}
           </View>
+        }
+        ListFooterComponent={
+          filtered.length > 0 && segment === "active" ? (
+            <Text
+              style={[
+                RTL_TEXT,
+                {
+                  color: colors.faint,
+                  fontSize: 12,
+                  textAlign: "center",
+                  paddingTop: spacing.sm,
+                  lineHeight: 18,
+                },
+              ]}
+            >
+              {t("bookingsListHint")}
+            </Text>
+          ) : null
         }
       />
     </View>

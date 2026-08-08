@@ -9,7 +9,9 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  Switch,
   Text,
+  TextStyle,
   View,
 } from "react-native";
 import { Image } from "expo-image";
@@ -33,12 +35,16 @@ import {
   EmptyState,
   Input,
   SectionHeader,
+  SheetHandle,
   SkeletonList,
 } from "../../components/ui";
 import { useToast } from "../../components/Toast";
 import type { Booking, BookingUrgency, Offer, OfferStatus } from "../../lib/types";
 
 const ETA_PRESETS = [30, 60, 90, 120];
+
+/** Money is written in Latin digits — force LTR so "₪250 – ₪400" never flips. */
+const LTR: TextStyle = { writingDirection: "ltr" };
 
 const OFFER_STATUS_KEY: Record<OfferStatus, string> = {
   pending: "offerPending",
@@ -187,7 +193,7 @@ export default function DashboardScreen() {
 
   if (!isPro || !professional || !uid) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: "center", padding: spacing.lg }}>
+      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: "center", padding: spacing.lg, gap: spacing.lg }}>
         <EmptyState icon="briefcase-outline" title={t("proGateTitle")} subtitle={t("proGateSubtitle")} />
         <Button title={t("proGateCta")} icon="briefcase-plus" onPress={() => router.push("/become-pro")} />
       </View>
@@ -272,27 +278,26 @@ export default function DashboardScreen() {
           <Image
             key={i}
             source={{ uri: p }}
-            style={{ width: 38, height: 38, borderRadius: radius.sm, backgroundColor: colors.chip }}
+            style={{ width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.chip }}
             contentFit="cover"
           />
         ))}
       </View>
     ) : null;
 
-  // urgent has to be impossible to miss in a scanned feed
+  // One accent, not three: urgent requests wear a danger-tinted pill and nothing
+  // else — the feed stays calm and the pill still jumps out when scanning.
   const renderUrgency = (urgency: BookingUrgency) => {
     const urgent = urgency === "same_day";
     return (
       <View
         style={{
           ...ROW,
-          gap: 4,
-          paddingHorizontal: 9,
+          gap: 5,
+          paddingHorizontal: 10,
           paddingVertical: 4,
           borderRadius: radius.full,
           backgroundColor: urgent ? colors.dangerTint : colors.chip,
-          borderWidth: urgent ? 1.5 : 1,
-          borderColor: urgent ? colors.danger : colors.border,
         }}
       >
         <MaterialCommunityIcons
@@ -304,7 +309,7 @@ export default function DashboardScreen() {
           style={{
             color: urgent ? colors.danger : colors.muted,
             fontSize: 11.5,
-            fontWeight: urgent ? "800" : "600",
+            fontWeight: "700",
           }}
         >
           {t(urgent ? "quoteUrgent" : "quoteScheduled")}
@@ -312,6 +317,19 @@ export default function DashboardScreen() {
       </View>
     );
   };
+
+  const metaDot = (icon: keyof typeof Ionicons.glyphMap, label: string) => (
+    <View style={{ ...ROW, gap: 3 }}>
+      <Ionicons name={icon} size={12} color={colors.faint} />
+      <Text style={{ color: colors.faint, fontSize: 12 }}>{label}</Text>
+    </View>
+  );
+
+  const stats = [
+    { key: "statOpenNow", value: openReqs.length },
+    { key: "statPendingOffers", value: pendingOffersCount },
+    { key: "statActiveJobs", value: activeJobsCount },
+  ] as const;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -329,14 +347,14 @@ export default function DashboardScreen() {
           />
         }
       >
-        {/* availability — big switch-style pill */}
-        <Card style={{ gap: spacing.md }}>
-          <View style={{ ...ROW, gap: 10 }}>
+        {/* ---------- availability: one calm switch ---------- */}
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          <View style={{ ...ROW, gap: spacing.md, padding: spacing.lg }}>
             <View
               style={{
-                width: 40,
-                height: 40,
-                borderRadius: 20,
+                width: 42,
+                height: 42,
+                borderRadius: radius.full,
                 backgroundColor: available ? colors.successTint : colors.chip,
                 alignItems: "center",
                 justifyContent: "center",
@@ -344,131 +362,74 @@ export default function DashboardScreen() {
             >
               <MaterialCommunityIcons
                 name={available ? "lightning-bolt" : "power-sleep"}
-                size={20}
+                size={21}
                 color={available ? colors.success : colors.muted}
               />
             </View>
-            <View style={{ flexShrink: 1, gap: 2 }}>
+            <View style={{ flex: 1, gap: 2 }}>
               <Text style={[RTL_TEXT, { color: colors.text, fontSize: 15.5, fontWeight: "800" }]}>
                 {t("availableForWork")}
               </Text>
-              {/* today's published working hours — tap to edit */}
-              <Pressable onPress={() => router.push("/pro-settings")} hitSlop={6} style={{ ...ROW, gap: 5 }}>
-                <Ionicons name="time-outline" size={13} color={colors.muted} />
-                <Text style={{ color: colors.muted, fontSize: 12.5 }}>
-                  {todayHoursLabel(professional.working_hours, lang) ?? t("setHoursHint")}
-                </Text>
-              </Pressable>
+              <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, lineHeight: 18 }]}>
+                {t(available ? "availabilityOnHint" : "availabilityOffHint")}
+              </Text>
             </View>
+            <Switch
+              value={available}
+              onValueChange={toggleAvailable}
+              trackColor={{ false: colors.chip, true: colors.success }}
+              thumbColor={colors.card}
+              ios_backgroundColor={colors.chip}
+            />
           </View>
-          <View
-            style={{
+
+          {/* today's published working hours — tap to edit */}
+          <Pressable
+            onPress={() => router.push("/pro-settings")}
+            style={({ pressed }) => ({
               ...ROW,
-              backgroundColor: colors.chip,
-              borderRadius: radius.full,
-              padding: 4,
-              gap: 4,
-            }}
+              gap: 8,
+              paddingHorizontal: spacing.lg,
+              paddingVertical: spacing.md,
+              borderTopWidth: 1,
+              borderTopColor: colors.hairline,
+              opacity: pressed ? 0.7 : 1,
+            })}
           >
-            <Pressable
-              onPress={() => !available && toggleAvailable(true)}
-              style={{
-                flex: 1,
-                ...ROW,
-                justifyContent: "center",
-                gap: 8,
-                paddingVertical: 13,
-                borderRadius: radius.full,
-                backgroundColor: available ? colors.successTint : "transparent",
-                borderWidth: available ? 1.5 : 0,
-                borderColor: colors.success,
-              }}
-            >
-              <View
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 5,
-                  backgroundColor: available ? colors.success : colors.faint,
-                }}
-              />
-              <Text
-                style={{
-                  color: available ? colors.success : colors.muted,
-                  fontSize: 14.5,
-                  fontWeight: available ? "800" : "600",
-                }}
-              >
-                {t("available")}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => available && toggleAvailable(false)}
-              style={{
-                flex: 1,
-                ...ROW,
-                justifyContent: "center",
-                gap: 8,
-                paddingVertical: 13,
-                borderRadius: radius.full,
-                backgroundColor: !available ? colors.card : "transparent",
-                borderWidth: !available ? 1.5 : 0,
-                borderColor: colors.border,
-              }}
-            >
-              <View
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 5,
-                  backgroundColor: colors.faint,
-                }}
-              />
-              <Text
-                style={{
-                  color: !available ? colors.text : colors.muted,
-                  fontSize: 14.5,
-                  fontWeight: !available ? "800" : "600",
-                }}
-              >
-                {t("unavailable")}
-              </Text>
-            </Pressable>
-          </View>
-          {!available ? (
-            <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5 }]}>
-              {t("availabilityOffHint")}
+            <Ionicons name="time-outline" size={15} color={colors.muted} />
+            <Text style={[RTL_TEXT, { flex: 1, color: colors.muted, fontSize: 12.5 }]}>
+              {todayHoursLabel(professional.working_hours, lang) ?? t("setHoursHint")}
             </Text>
-          ) : null}
+            <Ionicons name="chevron-back" size={16} color={colors.faint} />
+          </Pressable>
         </Card>
 
-        {/* compact stats row */}
-        <View style={{ ...ROW, gap: spacing.md, alignItems: "stretch" }}>
-          {(
-            [
-              { key: "statOpenNow", value: openReqs.length, icon: "radar" as const },
-              { key: "statPendingOffers", value: pendingOffersCount, icon: "send-clock" as const },
-              { key: "statActiveJobs", value: activeJobsCount, icon: "hammer-wrench" as const },
-            ] as const
-          ).map((s) => (
+        {/* ---------- compact stats, one card ---------- */}
+        <View
+          style={{
+            ...ROW,
+            backgroundColor: colors.card,
+            borderRadius: radius.lg,
+            paddingVertical: spacing.md,
+            ...shadows.card,
+          }}
+        >
+          {stats.map((s, i) => (
             <View
               key={s.key}
               style={{
                 flex: 1,
-                backgroundColor: colors.card,
-                borderRadius: radius.lg,
-                paddingVertical: spacing.md,
-                paddingHorizontal: spacing.sm,
                 alignItems: "center",
-                gap: 4,
-                ...shadows.card,
+                gap: 2,
+                paddingHorizontal: spacing.xs,
+                borderLeftWidth: i < stats.length - 1 ? 1 : 0,
+                borderLeftColor: colors.hairline,
               }}
             >
-              <MaterialCommunityIcons name={s.icon} size={16} color={colors.brand} />
-              <Text style={{ color: colors.brand, fontSize: 20, fontWeight: "800" }}>{s.value}</Text>
+              <Text style={{ color: colors.text, fontSize: 20, fontWeight: "800" }}>{s.value}</Text>
               <Text
                 numberOfLines={1}
-                style={{ color: colors.muted, fontSize: 10.5, fontWeight: "600", textAlign: "center" }}
+                style={{ color: colors.muted, fontSize: 11, fontWeight: "600", textAlign: "center" }}
               >
                 {t(s.key)}
               </Text>
@@ -476,7 +437,7 @@ export default function DashboardScreen() {
           ))}
         </View>
 
-        {/* open requests — the whole job of this screen */}
+        {/* ---------- open requests — the whole job of this screen ---------- */}
         <View style={{ gap: spacing.md }}>
           <SectionHeader title={t("openRequestsTitle")} />
           {openReqs.length === 0 ? (
@@ -484,59 +445,40 @@ export default function DashboardScreen() {
           ) : (
             openReqs.map((b) => {
               const mine = myOffers[b.id];
-              const urgent = b.urgency === "same_day";
               return (
-                <Card
-                  key={b.id}
-                  style={
-                    urgent
-                      ? { gap: 10, borderWidth: 1.5, borderColor: colors.danger }
-                      : { gap: 10 }
-                  }
-                >
+                <Card key={b.id} style={{ gap: spacing.md }}>
+                  {/* head: trade + where/when, urgency pill on the far side */}
                   <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
-                    <View style={{ ...ROW, gap: 8, flexShrink: 1 }}>
+                    <View style={{ ...ROW, gap: 10, flexShrink: 1 }}>
                       <View
                         style={{
-                          width: 38,
-                          height: 38,
+                          width: 42,
+                          height: 42,
                           borderRadius: radius.md,
-                          backgroundColor: urgent ? colors.dangerTint : colors.brandTint,
+                          backgroundColor: colors.brandTint,
                           alignItems: "center",
                           justifyContent: "center",
                         }}
                       >
                         <MaterialCommunityIcons
                           name={(b.category?.icon as any) ?? "tools"}
-                          size={20}
-                          color={urgent ? colors.danger : colors.brand}
+                          size={21}
+                          color={colors.brand}
                         />
                       </View>
-                      <View style={{ flexShrink: 1, gap: 2 }}>
+                      <View style={{ flexShrink: 1, gap: 3 }}>
                         <Text
                           numberOfLines={1}
-                          style={[RTL_TEXT, { color: colors.text, fontSize: 14.5, fontWeight: "800" }]}
+                          style={[RTL_TEXT, { color: colors.text, fontSize: 15, fontWeight: "800" }]}
                         >
                           {b.category ? loc(b.category, "name") : b.title}
                         </Text>
-                        <View style={{ ...ROW, gap: 8 }}>
-                          {b.city ? (
-                            <View style={{ ...ROW, gap: 3 }}>
-                              <Ionicons name="location-outline" size={12} color={colors.faint} />
-                              <Text style={{ color: colors.faint, fontSize: 12 }}>{loc(b.city, "name")}</Text>
-                            </View>
-                          ) : null}
-                          <Text style={{ color: colors.faint, fontSize: 12 }}>
-                            {formatTime(b.created_at, lang)}
-                          </Text>
-                          {b.photos.length ? (
-                            <View style={{ ...ROW, gap: 3 }}>
-                              <Ionicons name="images-outline" size={12} color={colors.faint} />
-                              <Text style={{ color: colors.faint, fontSize: 12 }}>
-                                {t("photosCount", { count: b.photos.length })}
-                              </Text>
-                            </View>
-                          ) : null}
+                        <View style={{ ...ROW, gap: 10, flexWrap: "wrap" }}>
+                          {b.city ? metaDot("location-outline", loc(b.city, "name")) : null}
+                          {metaDot("time-outline", formatTime(b.created_at, lang))}
+                          {b.photos.length
+                            ? metaDot("images-outline", t("photosCount", { count: b.photos.length }))
+                            : null}
                         </View>
                       </View>
                     </View>
@@ -544,7 +486,7 @@ export default function DashboardScreen() {
                   </View>
 
                   {b.title || b.description ? (
-                    <Text numberOfLines={2} style={[RTL_TEXT, { color: colors.muted, fontSize: 13 }]}>
+                    <Text numberOfLines={2} style={[RTL_TEXT, { color: colors.muted, fontSize: 13.5, lineHeight: 20 }]}>
                       {b.title ? `${b.title}${b.description ? " — " : ""}` : ""}
                       {b.description}
                     </Text>
@@ -553,8 +495,12 @@ export default function DashboardScreen() {
                   {b.scheduled_at ? (
                     <View style={{ ...ROW, gap: 6 }}>
                       <Ionicons name="calendar-outline" size={14} color={colors.brand} />
-                      <Text style={[RTL_TEXT, { color: colors.text, fontSize: 12.5, flexShrink: 1 }]}>
-                        {t("quotePreferredTime")}: {formatDateTime(b.scheduled_at, lang)}
+                      <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5 }]}>
+                        {t("quotePreferredTime")}
+                      </Text>
+                      {/* localized date: Arabic/Hebrew words with digit runs — RTL text */}
+                      <Text style={[RTL_TEXT, { color: colors.text, fontSize: 12.5, fontWeight: "700", flexShrink: 1 }]}>
+                        {formatDateTime(b.scheduled_at, lang)}
                       </Text>
                     </View>
                   ) : null}
@@ -562,24 +508,34 @@ export default function DashboardScreen() {
                   {renderPhotosStrip(b.photos)}
 
                   {mine ? (
-                    <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
-                      <View style={{ ...ROW, gap: 6, flexShrink: 1 }}>
-                        <Text style={{ color: colors.muted, fontSize: 13, fontWeight: "600" }}>
-                          {t("yourOffer")}:
+                    <View
+                      style={{
+                        ...ROW,
+                        justifyContent: "space-between",
+                        gap: 8,
+                        backgroundColor: colors.brandTint,
+                        borderRadius: radius.md,
+                        paddingHorizontal: spacing.md,
+                        paddingVertical: spacing.sm + 2,
+                      }}
+                    >
+                      <View style={{ ...ROW, gap: 8, flexShrink: 1 }}>
+                        <Text style={{ color: colors.muted, fontSize: 12.5, fontWeight: "600" }}>
+                          {t("yourOffer")}
                         </Text>
-                        <Text style={{ color: colors.brand, fontSize: 15, fontWeight: "800" }}>
+                        <Text style={[LTR, { color: colors.brand, fontSize: 15, fontWeight: "800" }]}>
                           {quoteRangeLabel(mine)}
                         </Text>
                         {mine.eta_minutes != null ? (
-                          <Text style={{ color: colors.faint, fontSize: 12 }}>
-                            {mine.eta_minutes} {t("minutesShort")}
+                          <Text style={[LTR, { color: colors.faint, fontSize: 12 }]}>
+                            {`${mine.eta_minutes} ${t("minutesShort")}`}
                           </Text>
                         ) : null}
                       </View>
                       <Badge label={t(OFFER_STATUS_KEY[mine.status])} tone={OFFER_STATUS_TONE[mine.status]} />
                     </View>
                   ) : (
-                    <Button title={t("sendOffer")} icon="send" small onPress={() => openQuoteSheet(b)} />
+                    <Button title={t("sendOffer")} icon="send" onPress={() => openQuoteSheet(b)} />
                   )}
                 </Card>
               );
@@ -588,7 +544,7 @@ export default function DashboardScreen() {
         </View>
       </ScrollView>
 
-      {/* quote bottom sheet — a price RANGE, an arrival time, an optional note */}
+      {/* ---------- quote sheet: a price RANGE, an arrival time, an optional note ---------- */}
       <Modal visible={!!quoteFor} transparent animationType="slide" onRequestClose={() => setQuoteFor(null)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
           <Pressable style={{ flex: 1, backgroundColor: colors.overlay }} onPress={() => setQuoteFor(null)} />
@@ -599,29 +555,31 @@ export default function DashboardScreen() {
               backgroundColor: colors.card,
               borderTopLeftRadius: radius.xl,
               borderTopRightRadius: radius.xl,
-              padding: spacing.xl,
+              padding: spacing.lg,
               paddingBottom: insets.bottom + spacing.xl,
               gap: spacing.lg,
             }}
           >
-            <View style={{ ...ROW, justifyContent: "space-between" }}>
-              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 17, fontWeight: "800" }]}>
-                {t("sendOffer")}
-              </Text>
-              <Pressable onPress={() => setQuoteFor(null)} hitSlop={8}>
+            <SheetHandle />
+
+            <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
+              <View style={{ flexShrink: 1, gap: 3 }}>
+                <Text style={[RTL_TEXT, { color: colors.text, fontSize: 18, fontWeight: "800" }]}>
+                  {t("sendOffer")}
+                </Text>
+                {quoteFor ? (
+                  <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.muted, fontSize: 13 }]}>
+                    {quoteFor.category ? loc(quoteFor.category, "name") : quoteFor.title}
+                    {quoteFor.city ? ` · ${loc(quoteFor.city, "name")}` : ""}
+                  </Text>
+                ) : null}
+              </View>
+              <Pressable onPress={() => setQuoteFor(null)} hitSlop={10}>
                 <Ionicons name="close" size={22} color={colors.muted} />
               </Pressable>
             </View>
-            {quoteFor ? (
-              <View style={{ ...ROW, gap: 8, flexWrap: "wrap" }}>
-                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13 }]}>
-                  {quoteFor.category ? loc(quoteFor.category, "name") : quoteFor.title}
-                  {quoteFor.city ? ` · ${loc(quoteFor.city, "name")}` : ""}
-                </Text>
-                {renderUrgency(quoteFor.urgency)}
-              </View>
-            ) : null}
 
+            {/* price range */}
             <View style={{ gap: 6 }}>
               <View style={{ ...ROW, gap: spacing.md, alignItems: "flex-start" }}>
                 <View style={{ flex: 1 }}>
@@ -634,6 +592,7 @@ export default function DashboardScreen() {
                       setPriceMin(v);
                       setPriceError(undefined);
                     }}
+                    style={LTR}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -646,16 +605,20 @@ export default function DashboardScreen() {
                       setPriceMax(v);
                       setPriceError(undefined);
                     }}
+                    style={LTR}
                   />
                 </View>
               </View>
               {priceError ? (
                 <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{priceError}</Text>
               ) : (
-                <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12 }]}>{t("quoteRangeHint")}</Text>
+                <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12, lineHeight: 18 }]}>
+                  {t("quoteRangeHint")}
+                </Text>
               )}
             </View>
 
+            {/* arrival time */}
             <View style={{ gap: 8 }}>
               <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, fontWeight: "600" }]}>
                 {t("offerEtaLabel")}
@@ -680,17 +643,18 @@ export default function DashboardScreen() {
                   keyboardType="numeric"
                   value={customEta}
                   onChangeText={setCustomEta}
+                  style={LTR}
                 />
               ) : null}
             </View>
 
             <Input
-              label={`${t("offerMessageLabel")} (${t("optional")})`}
+              label={`${t("offerMessageLabel")} · ${t("optional")}`}
               placeholder={t("offerMessagePlaceholder")}
               value={quoteMsg}
               onChangeText={setQuoteMsg}
               multiline
-              style={{ minHeight: 70, textAlignVertical: "top" }}
+              style={{ minHeight: 74, textAlignVertical: "top" }}
             />
 
             <Button title={t("send")} icon="send" loading={sending} onPress={submitQuote} />

@@ -1,8 +1,11 @@
 // Customer home — a service picker. There is no professional directory: the
 // customer taps the trade they need and we collect quotes for them.
+//
+// The screen is deliberately quiet: one status card (only when a request is
+// live), one search pill, and the service grid as the hero. Everything else
+// was noise and has been removed.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Animated,
   FlatList,
   Linking,
   Pressable,
@@ -23,7 +26,15 @@ import { useAuth } from "../../context/AuthContext";
 import { fetchCategories } from "../../lib/refdata";
 import { STATUS_KEY, STATUS_TONE } from "../../lib/format";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
-import { Badge, Button, EmptyState, SectionHeader, SkeletonList } from "../../components/ui";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  InlineNote,
+  SectionHeader,
+  SkeletonList,
+  pressCard,
+} from "../../components/ui";
 import type { Banner, Booking, Category } from "../../lib/types";
 
 /** icons come from the DB — never trust them blindly */
@@ -34,45 +45,14 @@ function safeIcon(icon?: string | null): keyof typeof MaterialCommunityIcons.gly
 }
 
 const ACTIVE_STATUSES = ["open", "pending", "accepted", "on_the_way", "in_progress"];
-/** statuses that change in real time while the customer watches */
-const LIVE_STATUSES = new Set(["open", "on_the_way", "in_progress"]);
 
-// ---------- subtle pulse dot for live booking statuses ----------
-function PulseDot({ color }: { color: string }) {
-  const anim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration: 1000, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0, duration: 1000, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [anim]);
-  return (
-    <View style={{ width: 16, height: 16, alignItems: "center", justifyContent: "center" }}>
-      <Animated.View
-        style={{
-          position: "absolute",
-          width: 16,
-          height: 16,
-          borderRadius: 8,
-          backgroundColor: color,
-          opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] }),
-          transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1.4] }) }],
-        }}
-      />
-      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
-    </View>
-  );
-}
-
-// ---------- banners carousel (auto-scroll, RTL: inverted) ----------
+// ---------- banners carousel (auto-scroll; RTL: `inverted` starts from the right) ----------
 function BannerCarousel({ banners, width }: { banners: Banner[]; width: number }) {
   const router = useRouter();
+  const { colors } = useTheme();
   const listRef = useRef<FlatList<Banner>>(null);
   const indexRef = useRef(0);
+  const height = Math.round(width * 0.42);
 
   useEffect(() => {
     if (banners.length < 2) return;
@@ -109,12 +89,12 @@ function BannerCarousel({ banners, width }: { banners: Banner[]; width: number }
       renderItem={({ item }) => (
         <Pressable
           onPress={() => openBanner(item)}
-          style={({ pressed }) => [{ width, transform: [{ scale: pressed && item.link ? 0.98 : 1 }] }]}
+          style={({ pressed }) => [{ width }, pressed && item.link ? pressCard : null]}
         >
           <View style={{ paddingHorizontal: 4 }}>
             <Image
               source={{ uri: item.image_url }}
-              style={{ width: width - 8, height: 140, borderRadius: radius.lg }}
+              style={{ width: width - 8, height, borderRadius: radius.lg, backgroundColor: colors.chip }}
               contentFit="cover"
               transition={200}
             />
@@ -220,11 +200,19 @@ export default function HomeScreen() {
   };
 
   if (!session) return null; // tabs layout redirects; safety guard
-  if (loading) return <SkeletonList count={5} />;
+  if (loading) return <SkeletonList count={4} />;
 
   const tileGap = spacing.md;
   const tileW = (width - spacing.lg * 2 - tileGap * 3) / 4;
   const bannerW = width - spacing.lg * 2;
+
+  /** the single line of context under the active request's title */
+  const activeContext = (b: Booking) => {
+    if (b.status === "open") {
+      return offersCount > 0 ? t("homeOffersCount", { count: offersCount }) : t("waitingOffersTitle");
+    }
+    return b.title.trim() || t("homeTrackRequest");
+  };
 
   return (
     <ScrollView
@@ -235,122 +223,104 @@ export default function HomeScreen() {
       }
       showsVerticalScrollIndicator={false}
     >
-      {/* 1 — current request card: the single most useful thing on the screen */}
+      {/* 1 — the live request: one line of context + its status, nothing more */}
       {activeBooking ? (
         <Pressable
           onPress={() => router.push(`/booking/${activeBooking.id}`)}
           style={({ pressed }) => [
             {
+              ...ROW,
+              gap: spacing.md,
               backgroundColor: colors.card,
               borderRadius: radius.lg,
               padding: spacing.md,
               ...shadows.card,
-              transform: [{ scale: pressed ? 0.98 : 1 }],
             },
+            pressed ? pressCard : null,
           ]}
         >
-          <View style={{ ...ROW, gap: 12 }}>
-            <View
-              style={{
-                width: 46,
-                height: 46,
-                borderRadius: radius.tile,
-                backgroundColor: colors.brandTint,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <MaterialCommunityIcons name={safeIcon(activeBooking.category?.icon)} size={24} color={colors.brand} />
-            </View>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={[RTL_TEXT, { color: colors.brand, fontSize: 11, fontWeight: "700" }]}>
-                {t("homeActiveRequest")}
-              </Text>
-              <Text
-                numberOfLines={1}
-                style={[RTL_TEXT, { color: colors.text, fontSize: 15, fontWeight: "800" }]}
-              >
-                {activeBooking.category ? loc(activeBooking.category, "name") : activeBooking.title}
-              </Text>
-              <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.muted, fontSize: 12 }]}>
-                {activeBooking.status === "open"
-                  ? offersCount > 0
-                    ? t("homeOffersCount", { count: offersCount })
-                    : t("waitingOffersTitle")
-                  : activeBooking.title}
-              </Text>
-            </View>
-            {LIVE_STATUSES.has(activeBooking.status) ? <PulseDot color={colors.brand} /> : null}
-            <Badge label={t(STATUS_KEY[activeBooking.status])} tone={STATUS_TONE[activeBooking.status]} />
-            <Ionicons name="chevron-back" size={16} color={colors.faint} />
+          <View
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: radius.tile,
+              backgroundColor: colors.brandTint,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <MaterialCommunityIcons name={safeIcon(activeBooking.category?.icon)} size={22} color={colors.brand} />
           </View>
+
+          <View style={{ flex: 1, gap: 3 }}>
+            <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 15, fontWeight: "800" }]}>
+              {activeBooking.category ? loc(activeBooking.category, "name") : activeBooking.title}
+            </Text>
+            <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5 }]}>
+              {activeContext(activeBooking)}
+            </Text>
+          </View>
+
+          <Badge label={t(STATUS_KEY[activeBooking.status])} tone={STATUS_TONE[activeBooking.status]} />
+          {/* row-reverse puts this last child on the visual left — "chevron-back"
+              points left, i.e. forward in RTL */}
+          <Ionicons name="chevron-back" size={16} color={colors.faint} />
         </Pressable>
       ) : null}
 
-      {/* 2 — prompt heading */}
-      <View style={{ marginTop: activeBooking ? 0 : spacing.xs }}>
-        <Text style={[RTL_TEXT, { color: colors.text, fontSize: 22, fontWeight: "800" }]}>
-          {t("homeSubtitle")}
-        </Text>
-      </View>
-
-      {/* 3 — readonly search bar -> /search (services, not people) */}
+      {/* 2 — read-only search pill → /search (finds services, never people) */}
       <Pressable
         onPress={() => router.push("/search")}
         style={({ pressed }) => [
           {
             ...ROW,
-            gap: 8,
+            gap: spacing.sm,
             backgroundColor: colors.card,
             borderRadius: radius.full,
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-            borderWidth: 1,
-            borderColor: colors.border,
+            paddingHorizontal: spacing.lg,
+            paddingVertical: spacing.md,
             ...shadows.card,
-            transform: [{ scale: pressed ? 0.98 : 1 }],
           },
+          pressed ? pressCard : null,
         ]}
       >
         <Ionicons name="search" size={18} color={colors.faint} />
-        <Text style={[RTL_TEXT, { flex: 1, color: colors.faint, fontSize: 14.5 }]}>
+        <Text numberOfLines={1} style={[RTL_TEXT, { flex: 1, color: colors.faint, fontSize: 14.5 }]}>
           {t("homeSearchPlaceholder")}
         </Text>
       </Pressable>
 
-      {/* 4 — banners */}
+      {/* 3 — banners (renders nothing at all when there are none) */}
       {banners.length > 0 ? <BannerCarousel banners={banners} width={bannerW} /> : null}
 
-      {/* error banner — the grid failed to load */}
+      {/* the grid failed to load — the only thing worth retrying */}
       {error ? (
-        <View
-          style={{
-            backgroundColor: colors.dangerTint,
-            borderRadius: radius.md,
-            padding: spacing.md,
-            gap: spacing.sm,
-          }}
-        >
-          <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 13.5, fontWeight: "600" }]}>
-            {t("error")}
-          </Text>
+        <View style={{ gap: spacing.sm }}>
+          <InlineNote tone="danger" icon="cloud-off-outline" text={t("searchErrorTitle")} />
           <Button title={t("retry")} variant="outline" small onPress={onRefresh} />
         </View>
       ) : null}
 
-      {/* 5 — the hero: every service we cover, 4 per row */}
+      {/* 4 — the hero: every trade we cover, 4 per row */}
       <View>
-        <SectionHeader title={t("homeServicesTitle")} action={t("search")} onAction={() => router.push("/search")} />
-        <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, marginBottom: spacing.lg, lineHeight: 18 }]}>
+        <SectionHeader title={t("homeSubtitle")} />
+        <Text
+          style={[
+            RTL_TEXT,
+            { color: colors.muted, fontSize: 12.5, lineHeight: 18, marginTop: -spacing.xs, marginBottom: spacing.lg },
+          ]}
+        >
           {t("homeServicesSubtitle")}
         </Text>
+
         {cats.length === 0 ? (
           !error ? <EmptyState icon="shape-outline" title={t("homeNoServices")} /> : null
         ) : (
           <View
             style={{
-              flexDirection: "row-reverse",
+              flexDirection: "row-reverse", // fills from the right
               flexWrap: "wrap",
+              alignItems: "flex-start",
               columnGap: tileGap,
               rowGap: spacing.lg,
             }}
@@ -360,7 +330,8 @@ export default function HomeScreen() {
                 key={cat.id}
                 onPress={() => router.push(`/create-booking?categoryId=${cat.id}`)}
                 style={({ pressed }) => [
-                  { width: tileW, alignItems: "center", gap: 7, transform: [{ scale: pressed ? 0.95 : 1 }] },
+                  { width: tileW, alignItems: "center", gap: spacing.sm },
+                  pressed ? pressCard : null,
                 ]}
               >
                 <View
@@ -376,6 +347,7 @@ export default function HomeScreen() {
                 >
                   <MaterialCommunityIcons name={safeIcon(cat.icon)} size={26} color={colors.brand} />
                 </View>
+                {/* fixed height for exactly two lines so every row lines up */}
                 <Text
                   numberOfLines={2}
                   style={{
@@ -383,7 +355,9 @@ export default function HomeScreen() {
                     fontSize: 11.5,
                     fontWeight: "600",
                     textAlign: "center",
-                    minHeight: 30,
+                    writingDirection: "rtl",
+                    lineHeight: 16,
+                    height: 32,
                   }}
                 >
                   {loc(cat, "name")}

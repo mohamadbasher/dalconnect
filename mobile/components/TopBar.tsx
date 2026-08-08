@@ -48,30 +48,53 @@ export function TopBar() {
           DalConnect
         </Text>
 
+        {/* Row is reversed, so the FIRST child sits on the right. In an RTL
+            interface the menu belongs on the start (right) side — which is also
+            the edge the drawer slides in from. */}
         <View style={{ ...ROW, justifyContent: "space-between" }}>
-          {/* bell (visual right) */}
           <Pressable
-            onPress={() => router.push("/notifications")}
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 19,
-              backgroundColor: "rgba(255,255,255,0.18)",
+            onPress={() => setMenuOpen(true)}
+            accessibilityRole="button"
+            hitSlop={8}
+            style={({ pressed }) => ({
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: pressed ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.16)",
               alignItems: "center",
               justifyContent: "center",
-            }}
+            })}
+          >
+            <Ionicons name="menu" size={22} color="#fff" />
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push("/notifications")}
+            accessibilityRole="button"
+            hitSlop={8}
+            style={({ pressed }) => ({
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: pressed ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.16)",
+              alignItems: "center",
+              justifyContent: "center",
+            })}
           >
             <Ionicons name="notifications-outline" size={20} color="#fff" />
             {unread > 0 ? (
               <View
                 style={{
                   position: "absolute",
-                  top: -2,
-                  right: -2,
-                  minWidth: 17,
-                  height: 17,
+                  top: -3,
+                  left: -3,
+                  minWidth: 18,
+                  height: 18,
                   borderRadius: 9,
                   backgroundColor: colors.gold,
+                  // a ring in the bar colour keeps the badge readable on orange
+                  borderWidth: 1.5,
+                  borderColor: colors.brand,
                   alignItems: "center",
                   justifyContent: "center",
                   paddingHorizontal: 3,
@@ -82,21 +105,6 @@ export function TopBar() {
                 </Text>
               </View>
             ) : null}
-          </Pressable>
-
-          {/* hamburger (visual left) */}
-          <Pressable
-            onPress={() => setMenuOpen(true)}
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 19,
-              backgroundColor: "rgba(255,255,255,0.18)",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Ionicons name="menu" size={22} color="#fff" />
           </Pressable>
         </View>
       </View>

@@ -83,7 +83,15 @@ export default function JobsScreen() {
 
   if (!isPro || !professional || !uid) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: "center", padding: spacing.lg }}>
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: colors.bg,
+          justifyContent: "center",
+          padding: spacing.lg,
+          gap: spacing.lg,
+        }}
+      >
         <EmptyState icon="briefcase-outline" title={t("proGateTitle")} subtitle={t("proGateSubtitle")} />
         <Button title={t("proGateCta")} icon="briefcase-plus" onPress={() => router.push("/become-pro")} />
       </View>
@@ -100,23 +108,33 @@ export default function JobsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={{ ...ROW, gap: 8, padding: spacing.lg, paddingBottom: spacing.sm }}>
+      {/* segments — fully-rounded pills, laid out from the right */}
+      <View style={{ ...ROW, gap: 8, paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
         {(["active", "done", "other"] as Segment[]).map((s) => {
           const active = segment === s;
           return (
             <Pressable
               key={s}
               onPress={() => setSegment(s)}
-              style={{
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              style={({ pressed }) => ({
                 ...ROW,
                 gap: 6,
                 backgroundColor: active ? colors.brand : colors.chip,
                 borderRadius: radius.full,
                 paddingHorizontal: 14,
-                paddingVertical: 8,
-              }}
+                paddingVertical: 9,
+                opacity: pressed ? 0.85 : 1,
+              })}
             >
-              <Text style={{ color: active ? colors.onBrand : colors.text, fontSize: 13, fontWeight: "600" }}>
+              <Text
+                style={{
+                  color: active ? colors.onBrand : colors.muted,
+                  fontSize: 13,
+                  fontWeight: active ? "800" : "600",
+                }}
+              >
                 {segLabel[s]}
               </Text>
               {counts[s] > 0 ? (
@@ -124,9 +142,9 @@ export default function JobsScreen() {
                   style={{
                     minWidth: 20,
                     height: 20,
-                    borderRadius: 10,
+                    borderRadius: radius.full,
                     paddingHorizontal: 5,
-                    backgroundColor: active ? colors.card : colors.brandTint,
+                    backgroundColor: colors.card,
                     alignItems: "center",
                     justifyContent: "center",
                   }}
@@ -141,7 +159,8 @@ export default function JobsScreen() {
       <FlatList
         data={visible}
         keyExtractor={(b) => b.id}
-        contentContainerStyle={{ padding: spacing.lg, paddingTop: spacing.sm, gap: spacing.md, flexGrow: 1 }}
+        contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, flexGrow: 1 }}
+        showsVerticalScrollIndicator={false}
         renderItem={({ item }) => <BookingCard booking={item} perspective="pro" href={`/job/${item.id}`} />}
         ListEmptyComponent={<EmptyState icon="hammer-wrench" title={t("noJobs")} subtitle={t("noJobsHint")} />}
         refreshControl={
