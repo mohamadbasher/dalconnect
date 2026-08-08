@@ -88,13 +88,16 @@ export default function TabsLayout() {
           href: proMode ? null : "/(tabs)/bookings",
         }}
       />
-      {/* center urgent-request action (customer only) */}
+      {/* Center new-request action (customer only).
+          `href` and `tabBarButton` are mutually exclusive in expo-router — the
+          button itself handles both the navigation and the pro-mode hiding. */}
       <Tabs.Screen
         name="urgent"
         options={{
           title: "",
-          tabBarButton: (props) => (proMode ? null : <UrgentTabButton />),
-          href: proMode ? null : "/(tabs)/urgent",
+          // hide the slot entirely in pro mode so it leaves no empty gap
+          tabBarItemStyle: proMode ? { display: "none" } : undefined,
+          tabBarButton: () => (proMode ? null : <UrgentTabButton />),
         }}
       />
 
