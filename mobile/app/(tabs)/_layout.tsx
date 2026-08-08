@@ -139,9 +139,6 @@ export default function TabsLayout() {
           tabBarIcon: icon("person-outline", "person"),
         }}
       />
-
-      {/* favorites — kept as a route but hidden from the tab bar */}
-      <Tabs.Screen name="favorites" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -3,6 +3,8 @@
 export type UserRole = "customer" | "professional" | "admin";
 export type VerificationStatus = "none" | "pending" | "approved" | "rejected";
 export type BookingType = "direct" | "open";
+/** same_day costs the customer more than a scheduled (next-day or later) request */
+export type BookingUrgency = "same_day" | "scheduled";
 export type BookingStatus =
   | "open"
   | "pending"
@@ -94,6 +96,16 @@ export interface Booking {
   lat: number | null;
   lng: number | null;
   scheduled_at: string | null;
+  /** how soon the customer needs it — same-day carries a higher request fee */
+  urgency: BookingUrgency;
+  /** platform fee for placing the request, snapshotted when it was created */
+  service_fee: number;
+  /** the accepted quote's range, copied from the offer on acceptance */
+  price_min: number | null;
+  price_max: number | null;
+  /** what was actually charged, entered on completion; commission is based on it */
+  final_price: number | null;
+  /** legacy single price — superseded by the range, kept for old rows */
   price: number | null;
   commission: number | null;
   cancel_reason: string | null;
@@ -107,11 +119,15 @@ export interface Booking {
   city?: City | null;
 }
 
+/** A quote: professionals answer a request with a price RANGE, not a fixed price. */
 export interface Offer {
   id: string;
   booking_id: string;
   professional_id: string;
-  price: number;
+  price_min: number | null;
+  price_max: number | null;
+  /** legacy single price — kept for rows created before quotes became ranges */
+  price: number | null;
   eta_minutes: number | null;
   message: string;
   status: OfferStatus;

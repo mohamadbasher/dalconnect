@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme, radius, spacing } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
@@ -9,7 +10,7 @@ import { supabase } from "../../lib/supabase";
 import { ROW } from "../../lib/rtl";
 import { BookingCard } from "../../components/BookingCard";
 import { Button, EmptyState, Skeleton, SkeletonList } from "../../components/ui";
-import type { Booking, BookingStatus } from "../../lib/types";
+import type { Booking, BookingStatus, BookingUrgency } from "../../lib/types";
 
 type Segment = "active" | "done" | "cancelled";
 

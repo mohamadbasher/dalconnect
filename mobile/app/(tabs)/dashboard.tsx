@@ -1,7 +1,8 @@
-// Pro dashboard — availability toggle, incoming direct bookings, nearby open requests.
+// Pro dashboard — availability, and the open-request feed the pro quotes on.
+// Customers no longer pick a professional: they post a request, every pro in the
+// trade is invited, and the quote is a PRICE RANGE + arrival time.
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -20,7 +21,7 @@ import { useTheme, radius, spacing, formatPrice } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
-import { formatTime } from "../../lib/format";
+import { formatDateTime, formatTime } from "../../lib/format";
 import { todayHoursLabel } from "../../lib/hours";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
 import {
@@ -34,7 +35,7 @@ import {
   SkeletonList,
 } from "../../components/ui";
 import { useToast } from "../../components/Toast";
-import type { Booking, Offer, OfferStatus } from "../../lib/types";
+import type { Booking, BookingUrgency, Offer, OfferStatus } from "../../lib/types";
 
 const ETA_PRESETS = [30, 60, 90, 120];
 
@@ -51,6 +52,16 @@ const OFFER_STATUS_TONE: Record<OfferStatus, "gold" | "success" | "danger" | "ne
   withdrawn: "neutral",
 };
 
+/** A quote is a range; old rows may still carry a single `price`. */
+function quoteRangeLabel(o: Pick<Offer, "price_min" | "price_max" | "price">): string {
+  const min = o.price_min ?? o.price;
+  const max = o.price_max ?? o.price;
+  if (min == null && max == null) return "—";
+  if (min == null) return formatPrice(max as number);
+  if (max == null || max === min) return formatPrice(min);
+  return `${formatPrice(min)} – ${formatPrice(max)}`;
+}
+
 export default function DashboardScreen() {
   const { colors, shadows } = useTheme();
   const { t, lang, loc } = useI18n();
@@ -63,21 +74,20 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [available, setAvailable] = useState(professional?.is_available ?? true);
-  const [direct, setDirect] = useState<Booking[]>([]);
   const [openReqs, setOpenReqs] = useState<Booking[]>([]);
   const [myOffers, setMyOffers] = useState<Record<string, Offer>>({});
   const [pendingOffersCount, setPendingOffersCount] = useState(0);
   const [activeJobsCount, setActiveJobsCount] = useState(0);
-  const [actingId, setActingId] = useState<string | null>(null);
 
-  // offer modal state
-  const [offerFor, setOfferFor] = useState<Booking | null>(null);
-  const [price, setPrice] = useState("");
+  // quote sheet state
+  const [quoteFor, setQuoteFor] = useState<Booking | null>(null);
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
   const [priceError, setPriceError] = useState<string | undefined>();
   const [eta, setEta] = useState<number>(60);
   const [customEta, setCustomEta] = useState("");
   const [useCustomEta, setUseCustomEta] = useState(false);
-  const [offerMsg, setOfferMsg] = useState("");
+  const [quoteMsg, setQuoteMsg] = useState("");
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
@@ -93,20 +103,11 @@ export default function DashboardScreen() {
         .eq("professional_id", uid);
       const catIds = (pcs ?? []).map((r: any) => r.category_id as number);
 
-      const sel = "*, category:categories(*), customer:profiles!bookings_customer_id_fkey(*), city:cities(*)";
-      const { data: directData } = await supabase
-        .from("bookings")
-        .select(sel)
-        .eq("professional_id", uid)
-        .eq("status", "pending")
-        .order("created_at", { ascending: false });
-      setDirect((directData as unknown as Booking[]) ?? []);
-
       let open: Booking[] = [];
       if (catIds.length) {
         const { data: openData } = await supabase
           .from("bookings")
-          .select(sel)
+          .select("*, category:categories(*), customer:profiles!bookings_customer_id_fkey(*), city:cities(*)")
           .eq("status", "open")
           .in("category_id", catIds)
           .neq("customer_id", uid)
@@ -114,11 +115,11 @@ export default function DashboardScreen() {
           .limit(50);
         open = (openData as unknown as Booking[]) ?? [];
       }
-      const myCity = professional?.city_id ?? null;
+      // urgent requests jump the queue; within the same urgency, newest first
       open.sort((a, b) => {
-        const ac = a.city_id != null && a.city_id === myCity ? 0 : 1;
-        const bc = b.city_id != null && b.city_id === myCity ? 0 : 1;
-        if (ac !== bc) return ac - bc;
+        const au = a.urgency === "same_day" ? 0 : 1;
+        const bu = b.urgency === "same_day" ? 0 : 1;
+        if (au !== bu) return au - bu;
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
       setOpenReqs(open);
@@ -137,7 +138,7 @@ export default function DashboardScreen() {
         setMyOffers({});
       }
 
-      // compact stats: my pending offers + jobs currently in progress
+      // compact stats: my quotes awaiting an answer + jobs currently running
       const [{ count: offersCount }, { count: activeCount }] = await Promise.all([
         supabase
           .from("offers")
@@ -156,7 +157,7 @@ export default function DashboardScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [uid, professional?.city_id]);
+  }, [uid]);
 
   useEffect(() => {
     load();
@@ -169,7 +170,7 @@ export default function DashboardScreen() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "bookings" }, () => load())
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "bookings", filter: `professional_id=eq.${uid}` },
+        { event: "UPDATE", schema: "public", table: "bookings" },
         () => load()
       )
       .on(
@@ -203,59 +204,31 @@ export default function DashboardScreen() {
     }
   };
 
-  const acceptDirect = async (b: Booking) => {
-    setActingId(b.id);
-    const { error } = await supabase
-      .from("bookings")
-      .update({ status: "accepted", accepted_at: new Date().toISOString() })
-      .eq("id", b.id)
-      .eq("status", "pending");
-    setActingId(null);
-    if (error) toast.error(t("error"));
-    else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      load();
-      router.push(`/job/${b.id}`);
-    }
-  };
-
-  // destructive — stays a real confirm dialog
-  const rejectDirect = (b: Booking) => {
-    Alert.alert(t("rejectConfirmTitle"), t("rejectConfirmMsg"), [
-      { text: t("cancel"), style: "cancel" },
-      {
-        text: t("reject"),
-        style: "destructive",
-        onPress: async () => {
-          setActingId(b.id);
-          const { error } = await supabase
-            .from("bookings")
-            .update({ status: "rejected" })
-            .eq("id", b.id)
-            .eq("status", "pending");
-          setActingId(null);
-          if (error) toast.error(t("error"));
-          else load();
-        },
-      },
-    ]);
-  };
-
-  const openOfferSheet = (b: Booking) => {
-    setOfferFor(b);
-    setPrice("");
+  const openQuoteSheet = (b: Booking) => {
+    setQuoteFor(b);
+    setPriceMin("");
+    setPriceMax("");
     setPriceError(undefined);
     setEta(60);
     setCustomEta("");
     setUseCustomEta(false);
-    setOfferMsg("");
+    setQuoteMsg("");
   };
 
-  const submitOffer = async () => {
-    if (!offerFor) return;
-    const priceNum = parseFloat(price.replace(",", "."));
-    if (!Number.isFinite(priceNum) || priceNum <= 0) {
-      setPriceError(t("invalidPrice"));
+  const submitQuote = async () => {
+    if (!quoteFor) return;
+    const min = parseFloat(priceMin.replace(",", "."));
+    const max = parseFloat(priceMax.replace(",", "."));
+    if (!priceMin.trim() || !priceMax.trim()) {
+      setPriceError(t("quoteRangeRequired"));
+      return;
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0 || max <= 0) {
+      setPriceError(t("quoteRangeInvalid"));
+      return;
+    }
+    if (min > max) {
+      setPriceError(t("quoteRangeOrder"));
       return;
     }
     let etaVal: number | null = eta;
@@ -264,24 +237,26 @@ export default function DashboardScreen() {
       etaVal = Number.isFinite(n) && n > 0 ? n : null;
     }
     setSending(true);
+    // `price` is the legacy nullable column — quotes are ranges now, don't send it
     const { error } = await supabase.from("offers").insert({
-      booking_id: offerFor.id,
+      booking_id: quoteFor.id,
       professional_id: uid,
-      price: priceNum,
+      price_min: min,
+      price_max: max,
       eta_minutes: etaVal,
-      message: offerMsg.trim(),
+      message: quoteMsg.trim(),
     });
     setSending(false);
     if (error) {
       if ((error as any).code === "23505") {
-        setOfferFor(null);
+        setQuoteFor(null);
         toast.info(t("alreadyOffered"));
         load();
       } else {
         toast.error(t("error"));
       }
     } else {
-      setOfferFor(null);
+      setQuoteFor(null);
       toast.success(t("offerSent"));
       load();
     }
@@ -300,11 +275,42 @@ export default function DashboardScreen() {
             contentFit="cover"
           />
         ))}
-        {photos.length > 4 ? (
-          <Text style={{ color: colors.faint, fontSize: 12 }}>+{photos.length - 4}</Text>
-        ) : null}
       </View>
     ) : null;
+
+  // urgent has to be impossible to miss in a scanned feed
+  const renderUrgency = (urgency: BookingUrgency) => {
+    const urgent = urgency === "same_day";
+    return (
+      <View
+        style={{
+          ...ROW,
+          gap: 4,
+          paddingHorizontal: 9,
+          paddingVertical: 4,
+          borderRadius: radius.full,
+          backgroundColor: urgent ? colors.dangerTint : colors.chip,
+          borderWidth: urgent ? 1.5 : 1,
+          borderColor: urgent ? colors.danger : colors.border,
+        }}
+      >
+        <MaterialCommunityIcons
+          name={urgent ? "lightning-bolt" : "calendar-clock"}
+          size={12}
+          color={urgent ? colors.danger : colors.muted}
+        />
+        <Text
+          style={{
+            color: urgent ? colors.danger : colors.muted,
+            fontSize: 11.5,
+            fontWeight: urgent ? "800" : "600",
+          }}
+        >
+          {t(urgent ? "quoteUrgent" : "quoteScheduled")}
+        </Text>
+      </View>
+    );
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -469,97 +475,7 @@ export default function DashboardScreen() {
           ))}
         </View>
 
-        {/* direct bookings */}
-        {direct.length ? (
-          <View style={{ gap: spacing.md }}>
-            <SectionHeader title={t("directBookingsTitle")} />
-            {direct.map((b) => (
-              <Pressable
-                key={b.id}
-                onPress={() => router.push(`/job/${b.id}`)}
-                style={({ pressed }) => [
-                  {
-                    backgroundColor: colors.card,
-                    borderRadius: radius.lg,
-                    padding: spacing.lg,
-                    gap: 10,
-                    ...shadows.card,
-                    borderWidth: 1.5,
-                    borderColor: colors.brandTint,
-                    transform: [{ scale: pressed ? 0.98 : 1 }],
-                  },
-                ]}
-              >
-                <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
-                  <View style={{ ...ROW, gap: 8, flexShrink: 1 }}>
-                    <View
-                      style={{
-                        width: 38,
-                        height: 38,
-                        borderRadius: radius.md,
-                        backgroundColor: colors.brandTint,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <MaterialCommunityIcons
-                        name={(b.category?.icon as any) ?? "tools"}
-                        size={20}
-                        color={colors.brand}
-                      />
-                    </View>
-                    <View style={{ flexShrink: 1 }}>
-                      <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 14.5, fontWeight: "800" }]}>
-                        {b.customer?.full_name ?? ""}
-                      </Text>
-                      <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.muted, fontSize: 12 }]}>
-                        {b.category ? loc(b.category, "name") : ""}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={{ color: colors.faint, fontSize: 11.5 }}>{formatTime(b.created_at, lang)}</Text>
-                </View>
-                {b.description ? (
-                  <Text numberOfLines={2} style={[RTL_TEXT, { color: colors.muted, fontSize: 13 }]}>
-                    {b.description}
-                  </Text>
-                ) : null}
-                <View style={{ ...ROW, justifyContent: "space-between" }}>
-                  {renderPhotosStrip(b.photos) ?? <View />}
-                  {b.photos.length ? null : (
-                    <Text style={{ color: colors.faint, fontSize: 12 }}>
-                      {b.scheduled_at ? formatTime(b.scheduled_at, lang) : ""}
-                    </Text>
-                  )}
-                </View>
-                <View style={{ ...ROW, gap: 10 }}>
-                  <View style={{ flex: 1 }}>
-                    <Button
-                      title={t("accept")}
-                      variant="success"
-                      small
-                      icon="check"
-                      loading={actingId === b.id}
-                      onPress={() => acceptDirect(b)}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Button
-                      title={t("reject")}
-                      variant="danger"
-                      small
-                      icon="close"
-                      disabled={actingId === b.id}
-                      onPress={() => rejectDirect(b)}
-                    />
-                  </View>
-                </View>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-
-        {/* open requests */}
+        {/* open requests — the whole job of this screen */}
         <View style={{ gap: spacing.md }}>
           <SectionHeader title={t("openRequestsTitle")} />
           {openReqs.length === 0 ? (
@@ -567,8 +483,16 @@ export default function DashboardScreen() {
           ) : (
             openReqs.map((b) => {
               const mine = myOffers[b.id];
+              const urgent = b.urgency === "same_day";
               return (
-                <Card key={b.id} style={{ gap: 10 }}>
+                <Card
+                  key={b.id}
+                  style={
+                    urgent
+                      ? { gap: 10, borderWidth: 1.5, borderColor: colors.danger }
+                      : { gap: 10 }
+                  }
+                >
                   <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
                     <View style={{ ...ROW, gap: 8, flexShrink: 1 }}>
                       <View
@@ -576,7 +500,7 @@ export default function DashboardScreen() {
                           width: 38,
                           height: 38,
                           borderRadius: radius.md,
-                          backgroundColor: colors.brandTint,
+                          backgroundColor: urgent ? colors.dangerTint : colors.brandTint,
                           alignItems: "center",
                           justifyContent: "center",
                         }}
@@ -584,14 +508,17 @@ export default function DashboardScreen() {
                         <MaterialCommunityIcons
                           name={(b.category?.icon as any) ?? "tools"}
                           size={20}
-                          color={colors.brand}
+                          color={urgent ? colors.danger : colors.brand}
                         />
                       </View>
-                      <View style={{ flexShrink: 1 }}>
-                        <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 14.5, fontWeight: "800" }]}>
+                      <View style={{ flexShrink: 1, gap: 2 }}>
+                        <Text
+                          numberOfLines={1}
+                          style={[RTL_TEXT, { color: colors.text, fontSize: 14.5, fontWeight: "800" }]}
+                        >
                           {b.category ? loc(b.category, "name") : b.title}
                         </Text>
-                        <View style={{ ...ROW, gap: 6 }}>
+                        <View style={{ ...ROW, gap: 8 }}>
                           {b.city ? (
                             <View style={{ ...ROW, gap: 3 }}>
                               <Ionicons name="location-outline" size={12} color={colors.faint} />
@@ -601,12 +528,18 @@ export default function DashboardScreen() {
                           <Text style={{ color: colors.faint, fontSize: 12 }}>
                             {formatTime(b.created_at, lang)}
                           </Text>
+                          {b.photos.length ? (
+                            <View style={{ ...ROW, gap: 3 }}>
+                              <Ionicons name="images-outline" size={12} color={colors.faint} />
+                              <Text style={{ color: colors.faint, fontSize: 12 }}>
+                                {t("photosCount", { count: b.photos.length })}
+                              </Text>
+                            </View>
+                          ) : null}
                         </View>
                       </View>
                     </View>
-                    {b.city_id != null && b.city_id === professional.city_id ? (
-                      <Badge label={loc(b.city, "name")} tone="brand" />
-                    ) : null}
+                    {renderUrgency(b.urgency)}
                   </View>
 
                   {b.title || b.description ? (
@@ -616,21 +549,25 @@ export default function DashboardScreen() {
                     </Text>
                   ) : null}
 
-                  {b.photos.length ? (
-                    <View style={{ ...ROW, justifyContent: "space-between" }}>
-                      {renderPhotosStrip(b.photos)}
-                      <Text style={{ color: colors.faint, fontSize: 11.5 }}>
-                        {t("photosCount", { count: b.photos.length })}
+                  {b.scheduled_at ? (
+                    <View style={{ ...ROW, gap: 6 }}>
+                      <Ionicons name="calendar-outline" size={14} color={colors.brand} />
+                      <Text style={[RTL_TEXT, { color: colors.text, fontSize: 12.5, flexShrink: 1 }]}>
+                        {t("quotePreferredTime")}: {formatDateTime(b.scheduled_at, lang)}
                       </Text>
                     </View>
                   ) : null}
 
+                  {renderPhotosStrip(b.photos)}
+
                   {mine ? (
-                    <View style={{ ...ROW, justifyContent: "space-between" }}>
-                      <View style={{ ...ROW, gap: 6 }}>
-                        <Text style={{ color: colors.muted, fontSize: 13, fontWeight: "600" }}>{t("yourOffer")}:</Text>
+                    <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
+                      <View style={{ ...ROW, gap: 6, flexShrink: 1 }}>
+                        <Text style={{ color: colors.muted, fontSize: 13, fontWeight: "600" }}>
+                          {t("yourOffer")}:
+                        </Text>
                         <Text style={{ color: colors.brand, fontSize: 15, fontWeight: "800" }}>
-                          {formatPrice(mine.price)}
+                          {quoteRangeLabel(mine)}
                         </Text>
                         {mine.eta_minutes != null ? (
                           <Text style={{ color: colors.faint, fontSize: 12 }}>
@@ -641,7 +578,7 @@ export default function DashboardScreen() {
                       <Badge label={t(OFFER_STATUS_KEY[mine.status])} tone={OFFER_STATUS_TONE[mine.status]} />
                     </View>
                   ) : (
-                    <Button title={t("sendOffer")} icon="send" small onPress={() => openOfferSheet(b)} />
+                    <Button title={t("sendOffer")} icon="send" small onPress={() => openQuoteSheet(b)} />
                   )}
                 </Card>
               );
@@ -650,12 +587,14 @@ export default function DashboardScreen() {
         </View>
       </ScrollView>
 
-      {/* send-offer bottom sheet */}
-      <Modal visible={!!offerFor} transparent animationType="slide" onRequestClose={() => setOfferFor(null)}>
+      {/* quote bottom sheet — a price RANGE, an arrival time, an optional note */}
+      <Modal visible={!!quoteFor} transparent animationType="slide" onRequestClose={() => setQuoteFor(null)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-          <Pressable style={{ flex: 1, backgroundColor: colors.overlay }} onPress={() => setOfferFor(null)} />
-          <View
-            style={{
+          <Pressable style={{ flex: 1, backgroundColor: colors.overlay }} onPress={() => setQuoteFor(null)} />
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            style={{ maxHeight: "85%" }}
+            contentContainerStyle={{
               backgroundColor: colors.card,
               borderTopLeftRadius: radius.xl,
               borderTopRightRadius: radius.xl,
@@ -668,28 +607,53 @@ export default function DashboardScreen() {
               <Text style={[RTL_TEXT, { color: colors.text, fontSize: 17, fontWeight: "800" }]}>
                 {t("sendOffer")}
               </Text>
-              <Pressable onPress={() => setOfferFor(null)} hitSlop={8}>
+              <Pressable onPress={() => setQuoteFor(null)} hitSlop={8}>
                 <Ionicons name="close" size={22} color={colors.muted} />
               </Pressable>
             </View>
-            {offerFor?.category ? (
-              <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13 }]}>
-                {loc(offerFor.category, "name")}
-                {offerFor.city ? ` · ${loc(offerFor.city, "name")}` : ""}
-              </Text>
+            {quoteFor ? (
+              <View style={{ ...ROW, gap: 8, flexWrap: "wrap" }}>
+                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13 }]}>
+                  {quoteFor.category ? loc(quoteFor.category, "name") : quoteFor.title}
+                  {quoteFor.city ? ` · ${loc(quoteFor.city, "name")}` : ""}
+                </Text>
+                {renderUrgency(quoteFor.urgency)}
+              </View>
             ) : null}
 
-            <Input
-              label={t("offerPriceLabel")}
-              placeholder={t("offerPricePlaceholder")}
-              keyboardType="numeric"
-              value={price}
-              onChangeText={(v) => {
-                setPrice(v);
-                setPriceError(undefined);
-              }}
-              error={priceError}
-            />
+            <View style={{ gap: 6 }}>
+              <View style={{ ...ROW, gap: spacing.md, alignItems: "flex-start" }}>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label={t("quoteMinLabel")}
+                    placeholder={t("quoteMinPlaceholder")}
+                    keyboardType="numeric"
+                    value={priceMin}
+                    onChangeText={(v) => {
+                      setPriceMin(v);
+                      setPriceError(undefined);
+                    }}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label={t("quoteMaxLabel")}
+                    placeholder={t("quoteMaxPlaceholder")}
+                    keyboardType="numeric"
+                    value={priceMax}
+                    onChangeText={(v) => {
+                      setPriceMax(v);
+                      setPriceError(undefined);
+                    }}
+                  />
+                </View>
+              </View>
+              {priceError ? (
+                <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{priceError}</Text>
+              ) : (
+                <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12 }]}>{t("quoteRangeHint")}</Text>
+              )}
+            </View>
 
             <View style={{ gap: 8 }}>
               <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, fontWeight: "600" }]}>
@@ -722,14 +686,14 @@ export default function DashboardScreen() {
             <Input
               label={`${t("offerMessageLabel")} (${t("optional")})`}
               placeholder={t("offerMessagePlaceholder")}
-              value={offerMsg}
-              onChangeText={setOfferMsg}
+              value={quoteMsg}
+              onChangeText={setQuoteMsg}
               multiline
               style={{ minHeight: 70, textAlignVertical: "top" }}
             />
 
-            <Button title={t("send")} icon="send" loading={sending} onPress={submitOffer} />
-          </View>
+            <Button title={t("send")} icon="send" loading={sending} onPress={submitQuote} />
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
     </View>

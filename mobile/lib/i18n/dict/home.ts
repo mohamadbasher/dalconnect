@@ -1,27 +1,25 @@
 import type { Dict } from "../index";
 
-// Customer home / search / category / pro-profile / favorites strings.
+// Customer home (service picker) / service search / category / pro-profile / favorites strings.
 export const home: Dict = {
   // ----- home -----
   homeGreeting: { ar: "أهلاً {name} 👋", he: "אהלן {name} 👋" },
   homeSubtitle: { ar: "شو بتحتاج اليوم؟", he: "מה אתם צריכים היום?" },
-  homeSearchPlaceholder: { ar: "ابحث عن خدمة أو مهني…", he: "חפשו שירות או בעל מקצוע…" },
-  homeTopRated: { ar: "الأعلى تقييماً", he: "המדורגים ביותר" },
-  homeMoreTile: { ar: "المزيد", he: "עוד" },
+  homeSearchPlaceholder: { ar: "شو الخدمة اللي بتدوّر عليها؟", he: "איזה שירות אתם מחפשים?" },
+  homeServicesTitle: { ar: "الخدمات", he: "השירותים" },
+  homeServicesSubtitle: {
+    ar: "اختر الخدمة، احكِ لنا شو بتحتاج، وبنوصل طلبك لكل المهنيين القريبين منك",
+    he: "בחרו שירות, ספרו לנו מה צריך, ונעביר את הבקשה לכל בעלי המקצוע באזורכם",
+  },
+  homeNoServices: { ar: "لا توجد خدمات متاحة حالياً", he: "אין שירותים זמינים כרגע" },
   homeCtaTitle: { ar: "بحاجة لشي مستعجل؟", he: "צריכים משהו דחוף?" },
   homeCtaSubtitle: {
-    ar: "أنشئ طلباً مفتوحاً واستقبل عروض أسعار من المهنيين القريبين منك",
-    he: "צרו בקשה פתוחה וקבלו הצעות מחיר מבעלי מקצוע באזורכם",
+    ar: "أنشئ طلباً واستقبل عروض أسعار من المهنيين القريبين منك",
+    he: "צרו בקשה וקבלו הצעות מחיר מבעלי מקצוע באזורכם",
   },
   homeCtaButton: { ar: "أنشئ طلباً الآن", he: "צרו בקשה עכשיו" },
-  homeNoProsYet: { ar: "لا يوجد مهنيون بعد", he: "אין עדיין בעלי מקצוע" },
   homeActiveRequest: { ar: "طلبك الحالي", he: "הבקשה הפעילה שלכם" },
   homeOffersCount: { ar: "عروض الأسعار: {count}", he: "הצעות מחיר: {count}" },
-  homeFeatured: { ar: "مهنيون مميّزون", he: "בעלי מקצוע מובחרים" },
-  homeFeaturedSubtitle: {
-    ar: "مهنيون اختارونا لعرض خدماتهم هنا",
-    he: "בעלי מקצוע שבחרו להציג כאן את השירותים שלהם",
-  },
 
   // ----- favorites -----
   favEmptyTitle: { ar: "لا مفضلات بعد", he: "אין עדיין מועדפים" },
@@ -30,29 +28,53 @@ export const home: Dict = {
     he: "לחצו על הלב בעמוד של בעל מקצוע כדי למצוא אותו כאן במהירות",
   },
 
-  // ----- search & filters -----
+  // ----- service search -----
+  searchServicesSubtitle: {
+    ar: "اختر الخدمة اللي بتحتاجها وبنجيب لك عروض أسعار",
+    he: "בחרו את השירות שאתם צריכים ונביא לכם הצעות מחיר",
+  },
+  searchServicesCount: { ar: "{count} خدمة", he: "{count} שירותים" },
+  searchNoServiceTitle: { ar: "ما لقينا خدمة بهذا الاسم", he: "לא מצאנו שירות בשם הזה" },
+  searchNoServiceSubtitle: {
+    ar: "جرّب كلمة ثانية أو تصفّح كل الخدمات",
+    he: "נסו מילה אחרת או עיינו בכל השירותים",
+  },
+  searchClearQuery: { ar: "امسح البحث", he: "ניקוי החיפוש" },
+  searchErrorTitle: { ar: "تعذّر تحميل الخدمات", he: "לא הצלחנו לטעון את השירותים" },
+  searchErrorSubtitle: {
+    ar: "تأكد من اتصالك بالإنترنت وحاول مرة ثانية",
+    he: "בדקו את החיבור לאינטרנט ונסו שוב",
+  },
+  // kept for the exported PickerSheet's callers (city / category / sort sheets)
   searchAllCities: { ar: "كل المدن", he: "כל הערים" },
   searchAllCategories: { ar: "كل الفئات", he: "כל הקטגוריות" },
   searchCityPlaceholder: { ar: "ابحث عن مدينة…", he: "חיפוש עיר…" },
   searchSort: { ar: "ترتيب", he: "מיון" },
   searchSortRating: { ar: "الأعلى تقييماً", he: "לפי דירוג" },
   searchSortNewest: { ar: "الأحدث", he: "החדשים ביותר" },
-  searchEmptySubtitle: {
-    ar: "جرّب كلمات أخرى أو غيّر الفلاتر",
-    he: "נסו מילים אחרות או שנו את הסינון",
+
+  // ----- urgency (create request) -----
+  urgencyTitle: { ar: "إيمتى بتحتاج الخدمة؟", he: "מתי אתם צריכים את השירות?" },
+  urgencySameDay: { ar: "اليوم", he: "היום" },
+  urgencySameDaySub: {
+    ar: "بأسرع وقت — بنوصل طلبك فوراً لكل المهنيين المتاحين",
+    he: "בהקדם האפשרי — נעביר את הבקשה מיד לכל בעלי המקצוע הזמינים",
   },
-  searchResultsCount: { ar: "{count} مهني", he: "{count} בעלי מקצוע" },
-  searchNoResultsTitle: { ar: "ما لقينا نتائج", he: "לא מצאנו תוצאות" },
-  searchClearFilters: { ar: "امسح البحث والفلاتر", he: "ניקוי החיפוש והסינון" },
-  searchErrorTitle: { ar: "تعذّر تحميل النتائج", he: "לא הצלחנו לטעון תוצאות" },
-  searchErrorSubtitle: {
-    ar: "تأكد من اتصالك بالإنترنت وحاول مرة ثانية",
-    he: "בדקו את החיבור לאינטרנט ונסו שוב",
+  urgencyScheduled: { ar: "بموعد لاحق", he: "במועד מאוחר יותר" },
+  urgencyScheduledSub: {
+    ar: "بكرة أو بعدها — اختر اليوم والساعة اللي بتناسبك",
+    he: "מחר או אחר כך — בחרו יום ושעה שנוחים לכם",
   },
-  searchBrowseSubtitle: {
-    ar: "تصفّح الفئات أو ابحث عن خدمة أو مهني",
-    he: "עיינו בקטגוריות או חפשו שירות או בעל מקצוע",
+  urgencyCostsMore: { ar: "رسوم أعلى", he: "עלות גבוהה יותר" },
+  urgencyRequired: { ar: "اختر إيمتى بتحتاج الخدمة", he: "בחרו מתי אתם צריכים את השירות" },
+  meterUrgency: { ar: "التوقيت", he: "תזמון" },
+  urgencyFeeNote: {
+    ar: "رسوم إنشاء الطلب على المنصة",
+    he: "דמי פתיחת בקשה בפלטפורמה",
   },
+  urgencyPickTimeOptional: { ar: "اختياري — بتقدر تتركه فاضي", he: "אופציונלי — אפשר להשאיר ריק" },
+  urgencyUrgentTag: { ar: "عاجل", he: "דחוף" },
+  urgencyScheduledTag: { ar: "بموعد", he: "מתוזמן" },
 
   // ----- category -----
   catNotFound: { ar: "الفئة غير موجودة", he: "הקטגוריה לא נמצאה" },
@@ -63,7 +85,7 @@ export const home: Dict = {
   },
   catOpenRequestCta: { ar: "أنشئ طلباً مفتوحاً في هذه الفئة", he: "צרו בקשה פתוחה בקטגוריה הזו" },
 
-  // ----- professional profile -----
+  // ----- professional profile (reachable only from a quote) -----
   proBookNow: { ar: "احجز الآن", he: "הזמינו עכשיו" },
   proAbout: { ar: "نبذة", he: "אודות" },
   proWorkingHours: { ar: "ساعات العمل", he: "שעות פעילות" },

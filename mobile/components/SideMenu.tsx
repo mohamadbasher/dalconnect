@@ -151,7 +151,6 @@ export function SideMenu({ visible, onClose }: { visible: boolean; onClose: () =
 
             <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.xs }} />
 
-            <MenuRow icon="heart-outline" label={t("menuFavorites")} onPress={() => go("/(tabs)/favorites")} />
             <MenuRow icon="clipboard-outline" label={t("menuMyBookings")} onPress={() => go("/(tabs)/bookings")} />
             <MenuRow icon="notifications-outline" label={t("menuNotifications")} onPress={() => go("/notifications")} />
             {isPro && professional ? (

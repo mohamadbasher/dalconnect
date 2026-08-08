@@ -3,11 +3,20 @@ import { notFound } from "next/navigation";
 import { S, fmt } from "@/lib/strings";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatDateTime, formatPrice, shortId } from "@/lib/format";
+import {
+  formatAmount,
+  formatDateTime,
+  formatPriceRange,
+  shortId,
+} from "@/lib/format";
 import { EmptyState } from "@/components/EmptyState";
-import { BookingStatusBadge, OfferStatusBadge } from "@/components/StatusBadge";
+import {
+  BookingStatusBadge,
+  OfferStatusBadge,
+  UrgencyBadge,
+} from "@/components/StatusBadge";
 import { adminCancelBooking } from "../actions";
-import type { BookingStatus, OfferStatus } from "@/lib/types";
+import type { BookingStatus, BookingUrgency, OfferStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +29,14 @@ type BookingDetail = {
   photos: string[];
   address: string;
   scheduled_at: string | null;
-  price: number | null;
+  urgency: BookingUrgency;
+  /** Fee the customer paid to post the request, snapshotted at creation. */
+  service_fee: number | null;
+  /** The accepted quote's range. */
+  price_min: number | null;
+  price_max: number | null;
+  /** What was actually charged; commission is computed from it. */
+  final_price: number | null;
   commission: number | null;
   cancel_reason: string | null;
   created_at: string;
@@ -35,9 +51,11 @@ type BookingDetail = {
   city: { name_ar: string } | null;
 };
 
+/** A quote: a price RANGE + arrival time + message. `price` is legacy/nullable. */
 type OfferRow = {
   id: string;
-  price: number;
+  price_min: number | null;
+  price_max: number | null;
   eta_minutes: number | null;
   message: string;
   status: OfferStatus;
@@ -76,7 +94,8 @@ export default async function BookingDetailPage({
       .from("bookings")
       .select(
         `id, type, status, title, description, photos, address, scheduled_at,
-         price, commission, cancel_reason, created_at, accepted_at, completed_at,
+         urgency, service_fee, price_min, price_max, final_price,
+         commission, cancel_reason, created_at, accepted_at, completed_at,
          customer:profiles!bookings_customer_id_fkey(id, full_name, phone),
          professional:professionals!bookings_professional_id_fkey(
            business_name, profile:profiles!professionals_id_fkey(full_name, phone)),
@@ -85,10 +104,14 @@ export default async function BookingDetailPage({
       )
       .eq("id", id)
       .maybeSingle(),
+    // Quotes are listed NEWEST FIRST. Sorting by price was the alternative, but
+    // `price_min` is nullable (legacy rows, and the range is optional), so a
+    // price sort would shuffle those to an arbitrary end; arrival order is also
+    // what the customer saw, which is what an admin reviewing a dispute needs.
     db
       .from("offers")
       .select(
-        `id, price, eta_minutes, message, status, created_at,
+        `id, price_min, price_max, eta_minutes, message, status, created_at,
          professional:professionals(business_name)`,
       )
       .eq("booking_id", id)
@@ -118,6 +141,7 @@ export default async function BookingDetailPage({
             </span>
           </h1>
           <BookingStatusBadge status={booking.status} />
+          <UrgencyBadge urgency={booking.urgency} />
         </div>
         {CANCELLABLE.includes(booking.status) && (
           <form action={adminCancelBooking}>
@@ -159,8 +183,28 @@ export default async function BookingDetailPage({
               <Field label={S.scheduledAt}>
                 {booking.scheduled_at ? formatDateTime(booking.scheduled_at) : S.asap}
               </Field>
-              <Field label={S.colPrice}>{formatPrice(booking.price)}</Field>
-              <Field label={S.colCommission}>{formatPrice(booking.commission)}</Field>
+              <Field label={S.colUrgency}>
+                <UrgencyBadge urgency={booking.urgency} />
+              </Field>
+              <Field label={S.colQuoteRange}>
+                <span dir="ltr">{formatPriceRange(booking.price_min, booking.price_max)}</span>
+              </Field>
+              <Field label={S.colFinalPrice}>
+                {formatAmount(booking.final_price)}
+                <span className="block text-[11px] font-normal text-[#8a7a6d]">
+                  {S.finalPriceHint}
+                </span>
+              </Field>
+              {/* The request fee stays hidden until the owner prices requests. */}
+              {Number(booking.service_fee ?? 0) > 0 && (
+                <Field label={S.colServiceFee}>
+                  {formatAmount(booking.service_fee)}
+                  <span className="block text-[11px] font-normal text-[#8a7a6d]">
+                    {S.serviceFeeHint}
+                  </span>
+                </Field>
+              )}
+              <Field label={S.colCommission}>{formatAmount(booking.commission)}</Field>
               <Field label={S.colCreated}>{formatDateTime(booking.created_at)}</Field>
             </div>
 
@@ -203,29 +247,37 @@ export default async function BookingDetailPage({
           </section>
         </div>
 
-        {/* Offers */}
+        {/* Quotes (offers) — every nearby pro in the trade may answer a request */}
         <section className="card self-start overflow-hidden">
           <div className="border-b border-[#ece5dd] px-4 py-3">
             <h2 className="section-title flex items-center gap-2">
               <span className="h-4 w-1 rounded-full bg-brand-600" />
-              {S.offers}
+              {S.quotes}
               <span className="text-xs font-medium text-[#8a7a6d]">({offers.length})</span>
+              <span className="text-[11px] font-normal text-[#8a7a6d]">
+                · {S.quotesOrderNote}
+              </span>
             </h2>
           </div>
           {offers.length === 0 ? (
-            <EmptyState icon="💬" title={S.noOffers} />
+            <EmptyState icon="💬" title={S.noQuotes} />
           ) : (
             <ul className="divide-y divide-[#f3eee8]">
               {offers.map((o) => (
-                <li key={o.id} className="px-4 py-3">
+                <li
+                  key={o.id}
+                  className={`px-4 py-3 ${o.status === "accepted" ? "bg-green-50/50" : ""}`}
+                >
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-sm font-bold">
                       {o.professional?.business_name || S.none}
                     </div>
                     <OfferStatusBadge status={o.status} />
                   </div>
-                  <div className="mt-1 flex items-center gap-3 text-xs text-[#8a7a6d]">
-                    <span className="font-bold text-brand-700">{formatPrice(o.price)}</span>
+                  <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-[#8a7a6d]">
+                    <span className="font-bold text-brand-700" dir="ltr">
+                      {formatPriceRange(o.price_min, o.price_max)}
+                    </span>
                     {o.eta_minutes !== null && (
                       <span>{fmt(S.offerEta, { m: o.eta_minutes })}</span>
                     )}

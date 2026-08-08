@@ -86,3 +86,46 @@ export type AuditLog = {
   metadata: Record<string, unknown>;
   created_at: string;
 };
+
+// --- 20260714000005_request_quote_model.sql (request & quote model) ---
+
+/**
+ * How urgently the customer needs the job. Chosen when the request is posted
+ * and never changed afterwards — `same_day` costs the customer more.
+ */
+export type BookingUrgency = "same_day" | "scheduled";
+
+/**
+ * The money columns on `bookings` under the request/quote model.
+ *
+ * - `service_fee` — what the customer paid to post the request. Stamped by the
+ *   `set_request_fee` trigger at INSERT from the current price list, so it is a
+ *   snapshot: editing the fees in /settings never rewrites past requests.
+ * - `price_min`/`price_max` — the accepted quote's range, copied from the offer.
+ * - `final_price` — what was actually charged; commission is computed from it.
+ * - `price` — legacy single price, kept only for rows created before the model
+ *   change. Never surface it on its own.
+ */
+export type BookingMoney = {
+  service_fee: number | null;
+  price_min: number | null;
+  price_max: number | null;
+  final_price: number | null;
+  /** @deprecated legacy pre-quote column */
+  price: number | null;
+  commission: number | null;
+};
+
+/** A professional's quote on a request. `price` is the legacy single value. */
+export type OfferQuote = {
+  price_min: number | null;
+  price_max: number | null;
+  /** @deprecated legacy pre-range column */
+  price: number | null;
+  eta_minutes: number | null;
+  message: string;
+  status: OfferStatus;
+};
+
+/** `app_settings` keys this panel edits. Values are stored as bare JSON numbers. */
+export type NumericSettingKey = "commission_rate" | "fee_same_day" | "fee_scheduled";

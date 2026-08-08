@@ -1,6 +1,7 @@
 import { S } from "@/lib/strings";
 import type {
   BookingStatus,
+  BookingUrgency,
   OfferStatus,
   ReportStatus,
   ReviewStatus,
@@ -36,6 +37,31 @@ export function BookingStatusBadge({ status }: { status: BookingStatus }) {
   return (
     <span className={`badge ${BOOKING_STYLES[status] ?? BOOKING_STYLES.cancelled}`}>
       {BOOKING_LABELS[status] ?? status}
+    </span>
+  );
+}
+
+/**
+ * Urgency is the one field that changes how a request must be handled, so the
+ * same-day badge is deliberately loud (solid red) while `scheduled` stays a
+ * quiet neutral chip — an urgent row should be findable at a glance in the list.
+ */
+const URGENCY_STYLES: Record<BookingUrgency, string> = {
+  same_day: "border border-red-600 bg-red-600 text-white",
+  scheduled: "bg-stone-100 text-stone-600 border border-stone-200",
+};
+
+const URGENCY_LABELS: Record<BookingUrgency, string> = {
+  same_day: S.urgencySameDay,
+  scheduled: S.urgencyScheduled,
+};
+
+export function UrgencyBadge({ urgency }: { urgency: BookingUrgency }) {
+  const known = URGENCY_STYLES[urgency] ? urgency : "scheduled";
+  return (
+    <span className={`badge whitespace-nowrap ${URGENCY_STYLES[known]}`}>
+      {known === "same_day" ? "⚡ " : "🗓 "}
+      {URGENCY_LABELS[known]}
     </span>
   );
 }

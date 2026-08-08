@@ -1,4 +1,5 @@
-// Search — debounced pro search with city/category/availability/verified/sort filters.
+// Service finder — customers search the trade they need, not the person.
+// Picking a service starts a request; there is no professional directory.
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
@@ -14,19 +15,13 @@ import {
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { supabase } from "../lib/supabase";
 import { useTheme, radius, spacing } from "../lib/theme";
 import { useI18n } from "../lib/i18n";
 import { useAuth } from "../context/AuthContext";
-import { fetchCategories, fetchCities } from "../lib/refdata";
+import { fetchCategories } from "../lib/refdata";
 import { ROW, RTL_TEXT } from "../lib/rtl";
-import { Button, Chip, EmptyState, Loading, SectionHeader, SkeletonList } from "../components/ui";
-import { ProCard } from "../components/ProCard";
-import type { Category, City, ProCard as ProCardType } from "../lib/types";
-
-const PRO_SELECT =
-  "*, profile:profiles!professionals_id_fkey!inner(*), professional_categories(category:categories(*)), city:cities(*)";
-const PRO_SELECT_BY_CAT = PRO_SELECT + ", cat_filter:professional_categories!inner(category_id)";
+import { Button, EmptyState, Loading, SectionHeader, SkeletonList } from "../components/ui";
+import type { Category } from "../lib/types";
 
 /** icons come from the DB — never trust them blindly */
 function safeIcon(icon?: string | null): keyof typeof MaterialCommunityIcons.glyphMap {
@@ -35,20 +30,8 @@ function safeIcon(icon?: string | null): keyof typeof MaterialCommunityIcons.gly
     : "tools") as keyof typeof MaterialCommunityIcons.glyphMap;
 }
 
-function mapPro(row: any): ProCardType {
-  return {
-    ...row,
-    profile: row.profile ?? undefined,
-    categories: (row.professional_categories ?? [])
-      .map((pc: any) => pc.category)
-      .filter(Boolean),
-    city: row.city ?? null,
-  };
-}
-
-type SortMode = "rating" | "newest";
-
 // ---------- bottom-sheet picker (city / category / sort) ----------
+// Kept as a shared export: other screens (e.g. /category/[id]) mount it.
 export function PickerSheet({
   visible,
   title,
@@ -186,158 +169,221 @@ export default function SearchScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const params = useLocalSearchParams<{ categoryId?: string; q?: string }>();
+  const params = useLocalSearchParams<{ q?: string }>();
 
   const [q, setQ] = useState(params.q ?? "");
-  const [cityId, setCityId] = useState<number | null>(null);
-  const [categoryId, setCategoryId] = useState<number | null>(
-    params.categoryId ? Number(params.categoryId) || null : null
-  );
-  const [availableOnly, setAvailableOnly] = useState(false);
-  const [verifiedOnly, setVerifiedOnly] = useState(false);
-  const [sort, setSort] = useState<SortMode>("rating");
-
-  const [cities, setCities] = useState<City[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
-  const [results, setResults] = useState<ProCardType[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
-  /** true once a query actually came back — separates "no results" from "not searched yet" */
-  const [searched, setSearched] = useState(false);
 
-  const [sheet, setSheet] = useState<"city" | "category" | "sort" | null>(null);
-
-  useEffect(() => {
-    fetchCities().then(setCities).catch(() => {});
-    fetchCategories().then(setCats).catch(() => {});
-  }, []);
-
-  // A single runner over *all* inputs (text + every filter). Because the effect
-  // below depends on the callback identity, changing any one of them restarts
-  // the same 300ms debounce instead of firing an extra un-debounced query.
-  const run = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     try {
       setError(false);
-      let query = supabase
-        .from("professionals")
-        .select(categoryId != null ? PRO_SELECT_BY_CAT : PRO_SELECT)
-        .eq("profile.is_banned", false);
-      if (categoryId != null) query = query.eq("cat_filter.category_id", categoryId);
-      if (cityId != null) query = query.eq("city_id", cityId);
-      if (availableOnly) query = query.eq("is_available", true);
-      if (verifiedOnly) query = query.eq("verification_status", "approved");
-      query =
-        sort === "rating"
-          ? query.order("rating_avg", { ascending: false }).order("rating_count", { ascending: false })
-          : query.order("created_at", { ascending: false });
-      const { data, error: err } = await query.limit(100);
-      if (err) throw err;
-      const mapped = ((data as any[]) ?? []).map(mapPro);
-      // free-text match applied client-side (business_name, bio and profile name in ar/he)
-      const needle = q.trim().toLowerCase();
-      setResults(
-        needle
-          ? mapped.filter((p) =>
-              [p.business_name, p.bio, p.profile?.full_name ?? ""]
-                .join(" ")
-                .toLowerCase()
-                .includes(needle)
-            )
-          : mapped
-      );
-      setSearched(true);
+      setCats(await fetchCategories(force));
     } catch {
-      setResults([]);
+      setCats([]);
       setError(true);
-    } finally {
-      setLoading(false);
     }
-  }, [q, categoryId, cityId, availableOnly, verifiedOnly, sort]);
+  }, []);
 
   useEffect(() => {
-    // flip to the skeleton the moment an input changes, so the list never shows
-    // stale results for the 300ms the debounce is still waiting
-    setLoading(true);
-    const timer = setTimeout(run, 300);
-    return () => clearTimeout(timer);
-  }, [run]);
+    load().finally(() => setLoading(false));
+  }, [load]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await run();
+    await load(true);
     setRefreshing(false);
   };
 
-  const clearFilters = useCallback(() => {
-    setQ("");
-    setCityId(null);
-    setCategoryId(null);
-    setAvailableOnly(false);
-    setVerifiedOnly(false);
-  }, []);
+  const needle = q.trim().toLowerCase();
+  const results = useMemo(() => {
+    if (!needle) return cats;
+    return cats.filter((c) =>
+      [c.name_ar, c.name_he, c.slug].join(" ").toLowerCase().includes(needle)
+    );
+  }, [cats, needle]);
+
+  const start = (categoryId: number) => router.push(`/create-booking?categoryId=${categoryId}`);
 
   if (authLoading) return <Loading />;
   if (!session) return <Redirect href="/(auth)/welcome" />;
 
-  // nothing typed + no filter → search doubles as a "browse all categories" screen
-  const browsing =
-    q.trim().length === 0 &&
-    cityId == null &&
-    categoryId == null &&
-    !availableOnly &&
-    !verifiedOnly;
+  const tileW = (width - spacing.lg * 2 - spacing.md * 3) / 4;
 
-  const selectedCity = cityId != null ? cities.find((c) => c.id === cityId) : null;
-  const selectedCat = categoryId != null ? cats.find((c) => c.id === categoryId) : null;
+  const tile = (cat: Category) => (
+    <Pressable
+      key={cat.id}
+      onPress={() => start(cat.id)}
+      style={({ pressed }) => [
+        { width: tileW, alignItems: "center", gap: 7, transform: [{ scale: pressed ? 0.95 : 1 }] },
+      ]}
+    >
+      <View
+        style={{
+          width: 60,
+          height: 60,
+          borderRadius: radius.tile,
+          backgroundColor: colors.card,
+          alignItems: "center",
+          justifyContent: "center",
+          ...shadows.card,
+        }}
+      >
+        <MaterialCommunityIcons name={safeIcon(cat.icon)} size={26} color={colors.brand} />
+      </View>
+      <Text
+        numberOfLines={2}
+        style={{ color: colors.text, fontSize: 11.5, fontWeight: "600", textAlign: "center", minHeight: 30 }}
+      >
+        {loc(cat, "name")}
+      </Text>
+    </Pressable>
+  );
 
-  const chips: {
-    key: string;
-    label: string;
-    active: boolean;
-    icon: keyof typeof MaterialCommunityIcons.glyphMap;
-    onPress: () => void;
-  }[] = [
-    {
-      key: "city",
-      label: selectedCity ? loc(selectedCity, "name") : t("city"),
-      active: cityId != null,
-      icon: "map-marker-outline",
-      onPress: () => setSheet("city"),
-    },
-    {
-      key: "category",
-      label: selectedCat ? loc(selectedCat, "name") : t("category"),
-      active: categoryId != null,
-      icon: "shape-outline",
-      onPress: () => setSheet("category"),
-    },
-    {
-      key: "available",
-      label: t("available"),
-      active: availableOnly,
-      icon: "clock-check-outline",
-      onPress: () => setAvailableOnly((v) => !v),
-    },
-    {
-      key: "verified",
-      label: t("verified"),
-      active: verifiedOnly,
-      icon: "check-decagram",
-      onPress: () => setVerifiedOnly((v) => !v),
-    },
-    {
-      key: "sort",
-      label: sort === "rating" ? t("searchSortRating") : t("searchSortNewest"),
-      active: false,
-      icon: "sort",
-      onPress: () => setSheet("sort"),
-    },
-  ];
+  const resultRow = (cat: Category) => (
+    <Pressable
+      key={cat.id}
+      onPress={() => start(cat.id)}
+      style={({ pressed }) => [
+        {
+          ...ROW,
+          gap: 12,
+          backgroundColor: colors.card,
+          borderRadius: radius.lg,
+          padding: spacing.md,
+          ...shadows.card,
+          transform: [{ scale: pressed ? 0.98 : 1 }],
+        },
+      ]}
+    >
+      <View
+        style={{
+          width: 46,
+          height: 46,
+          borderRadius: radius.tile,
+          backgroundColor: colors.brandTint,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <MaterialCommunityIcons name={safeIcon(cat.icon)} size={24} color={colors.brand} />
+      </View>
+      <Text numberOfLines={1} style={[RTL_TEXT, { flex: 1, color: colors.text, fontSize: 15.5, fontWeight: "800" }]}>
+        {loc(cat, "name")}
+      </Text>
+      <Ionicons name="chevron-back" size={16} color={colors.faint} />
+    </Pressable>
+  );
+
+  const body = () => {
+    if (loading) return <SkeletonList count={5} />;
+
+    if (error) {
+      return (
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: spacing.lg, gap: spacing.md }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} colors={[colors.brand]} />
+          }
+        >
+          <View style={{ backgroundColor: colors.dangerTint, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.md }}>
+            <View style={{ ...ROW, gap: 10 }}>
+              <MaterialCommunityIcons name="cloud-off-outline" size={26} color={colors.danger} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 15, fontWeight: "800" }]}>
+                  {t("searchErrorTitle")}
+                </Text>
+                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, lineHeight: 18 }]}>
+                  {t("searchErrorSubtitle")}
+                </Text>
+              </View>
+            </View>
+            <Button title={t("retry")} icon="refresh" onPress={onRefresh} />
+          </View>
+        </ScrollView>
+      );
+    }
+
+    // nothing typed → the whole catalogue as a grid
+    if (!needle) {
+      return (
+        <ScrollView
+          contentContainerStyle={{
+            padding: spacing.lg,
+            paddingTop: spacing.sm,
+            paddingBottom: insets.bottom + spacing.xl,
+            flexGrow: 1,
+          }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} colors={[colors.brand]} />
+          }
+        >
+          <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, marginBottom: spacing.md }]}>
+            {t("searchServicesSubtitle")}
+          </Text>
+          <SectionHeader title={t("categories")} />
+          {cats.length === 0 ? (
+            <EmptyState icon="shape-outline" title={t("homeNoServices")} />
+          ) : (
+            <View
+              style={{
+                flexDirection: "row-reverse",
+                flexWrap: "wrap",
+                columnGap: spacing.md,
+                rowGap: spacing.lg,
+              }}
+            >
+              {cats.map(tile)}
+            </View>
+          )}
+        </ScrollView>
+      );
+    }
+
+    // a query → matching services as rows
+    return (
+      <ScrollView
+        contentContainerStyle={{
+          padding: spacing.lg,
+          paddingTop: spacing.sm,
+          paddingBottom: insets.bottom + spacing.xl,
+          gap: spacing.md,
+          flexGrow: 1,
+        }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} colors={[colors.brand]} />
+        }
+      >
+        {results.length > 0 ? (
+          <>
+            <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5 }]}>
+              {t("searchServicesCount", { count: results.length })}
+            </Text>
+            {results.map(resultRow)}
+          </>
+        ) : (
+          <View style={{ flex: 1, justifyContent: "center", gap: spacing.md }}>
+            <EmptyState
+              icon="magnify-close"
+              title={t("searchNoServiceTitle")}
+              subtitle={t("searchNoServiceSubtitle")}
+            />
+            <Button title={t("searchClearQuery")} variant="outline" onPress={() => setQ("")} />
+          </View>
+        )}
+      </ScrollView>
+    );
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      {/* header: back + search input */}
+      {/* header: back + service search input */}
       <View
         style={{
           paddingTop: insets.top + spacing.sm,
@@ -394,182 +440,7 @@ export default function SearchScreen() {
         </View>
       </View>
 
-      {/* filter chips (inverted => starts from the right) */}
-      <FlatList
-        data={chips}
-        horizontal
-        inverted
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={(c) => c.key}
-        contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm, paddingVertical: spacing.sm }}
-        style={{ flexGrow: 0 }}
-        renderItem={({ item }) => (
-          <Chip label={item.label} active={item.active} icon={item.icon} onPress={item.onPress} />
-        )}
-      />
-
-      {/* browse state — full category grid (search doubles as "all categories") */}
-      {browsing ? (
-        <ScrollView
-          contentContainerStyle={{ padding: spacing.lg, paddingTop: spacing.sm, paddingBottom: insets.bottom + spacing.xl }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, marginBottom: spacing.md }]}>
-            {t("searchBrowseSubtitle")}
-          </Text>
-          <SectionHeader title={t("categories")} />
-          <View style={{ flexDirection: "row-reverse", flexWrap: "wrap", gap: spacing.md }}>
-            {cats.map((cat) => {
-              const tileW = (width - spacing.lg * 2 - spacing.md * 3) / 4;
-              return (
-                <Pressable
-                  key={cat.id}
-                  onPress={() => router.push(`/category/${cat.id}`)}
-                  style={({ pressed }) => [
-                    { width: tileW, alignItems: "center", gap: 6, transform: [{ scale: pressed ? 0.95 : 1 }] },
-                  ]}
-                >
-                  <View
-                    style={{
-                      width: 60,
-                      height: 60,
-                      borderRadius: radius.tile,
-                      backgroundColor: colors.card,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      ...shadows.card,
-                    }}
-                  >
-                    <MaterialCommunityIcons name={safeIcon(cat.icon)} size={26} color={colors.brand} />
-                  </View>
-                  <Text
-                    numberOfLines={2}
-                    style={{
-                      color: colors.text,
-                      fontSize: 11.5,
-                      fontWeight: "600",
-                      textAlign: "center",
-                      minHeight: 30,
-                    }}
-                  >
-                    {loc(cat, "name")}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          {cats.length === 0 ? <EmptyState icon="shape-outline" title={t("noResults")} /> : null}
-        </ScrollView>
-      ) : loading ? (
-        <SkeletonList count={5} />
-      ) : error ? (
-        /* (a) the query itself failed — network/server, not an empty result set */
-        <ScrollView
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: "center",
-            padding: spacing.lg,
-            gap: spacing.md,
-          }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} colors={[colors.brand]} />
-          }
-        >
-          <View
-            style={{
-              backgroundColor: colors.dangerTint,
-              borderRadius: radius.lg,
-              padding: spacing.lg,
-              gap: spacing.md,
-            }}
-          >
-            <View style={{ ...ROW, gap: 10 }}>
-              <MaterialCommunityIcons name="cloud-off-outline" size={26} color={colors.danger} />
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 15, fontWeight: "800" }]}>
-                  {t("searchErrorTitle")}
-                </Text>
-                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, lineHeight: 18 }]}>
-                  {t("searchErrorSubtitle")}
-                </Text>
-              </View>
-            </View>
-            <Button title={t("retry")} icon="refresh" onPress={onRefresh} />
-          </View>
-        </ScrollView>
-      ) : (
-        <FlatList
-          data={results}
-          keyExtractor={(p) => p.id}
-          renderItem={({ item }) => <ProCard pro={item} />}
-          contentContainerStyle={{
-            padding: spacing.lg,
-            paddingTop: spacing.sm,
-            paddingBottom: insets.bottom + spacing.xl,
-            gap: spacing.md,
-            flexGrow: 1,
-          }}
-          ListHeaderComponent={
-            results.length > 0 ? (
-              <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, marginBottom: 2 }]}>
-                {t("searchResultsCount", { count: results.length })}
-              </Text>
-            ) : null
-          }
-          ListEmptyComponent={
-            /* (b) the query succeeded but matched nothing */
-            <View style={{ flex: 1, justifyContent: "center", gap: spacing.md }}>
-              <EmptyState
-                icon="magnify-close"
-                title={searched ? t("searchNoResultsTitle") : t("noResults")}
-                subtitle={t("searchEmptySubtitle")}
-              />
-              <Button title={t("searchClearFilters")} variant="outline" onPress={clearFilters} />
-            </View>
-          }
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} colors={[colors.brand]} />
-          }
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        />
-      )}
-
-      {/* pickers */}
-      <PickerSheet
-        visible={sheet === "city"}
-        title={t("city")}
-        options={cities.map((c) => ({ id: c.id, label: loc(c, "name") }))}
-        selectedId={cityId}
-        onSelect={(id) => setCityId(id as number | null)}
-        onClose={() => setSheet(null)}
-        searchable
-        searchPlaceholder={t("searchCityPlaceholder")}
-        allLabel={t("searchAllCities")}
-      />
-      <PickerSheet
-        visible={sheet === "category"}
-        title={t("category")}
-        options={cats.map((c) => ({ id: c.id, label: loc(c, "name") }))}
-        selectedId={categoryId}
-        onSelect={(id) => setCategoryId(id as number | null)}
-        onClose={() => setSheet(null)}
-        allLabel={t("searchAllCategories")}
-      />
-      <PickerSheet
-        visible={sheet === "sort"}
-        title={t("searchSort")}
-        options={[
-          { id: "rating", label: t("searchSortRating") },
-          { id: "newest", label: t("searchSortNewest") },
-        ]}
-        selectedId={sort}
-        onSelect={(id) => {
-          if (id === "rating" || id === "newest") setSort(id);
-        }}
-        onClose={() => setSheet(null)}
-      />
+      {body()}
     </View>
   );
 }

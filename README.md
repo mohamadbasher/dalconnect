@@ -17,15 +17,31 @@ scripts/    One-off Node scripts used to provision/seed the live Supabase projec
 docs/       AGENT_BRIEF.md — internal conventions & foundation API reference
 ```
 
-## Core product
+## Core product — request & quote
 
-- **Two booking modes**: book a specific professional (direct), or create an **open
-  request** — nearby professionals in that category get notified and send **price
-  offers** (price + ETA + message); the customer compares and accepts one (atomic
-  `accept_offer` RPC).
-- **Job lifecycle**: pending/open → accepted → on the way → in progress → completed →
-  rated. Every transition notifies the other side (DB triggers → `notifications` table
-  → push).
+Customers **do not browse a directory of professionals**. There is no pro search.
+The whole product is one flow:
+
+1. **Pick a service.** Home is a grid of trades (electrician, plumber, AC…).
+2. **Describe the job** — problem, photos, location — and choose **urgency**:
+   `same_day` (costs the customer more) or `scheduled` (next day or later, with a
+   preferred date/time).
+3. **Every available professional in that trade is invited to quote.** A quote is a
+   **price range** (`price_min`–`price_max`), an arrival time, and a message.
+4. **The customer compares the responders** — their profile, rating, jobs completed,
+   verified badge — and **accepts one** or declines individual quotes (declining leaves
+   the request open for others).
+5. **On acceptance the professional's phone number is revealed** (`get_contact_phone`
+   RPC, gated so only the two parties can read it). They agree the details directly.
+6. **On completion the professional records the `final_price`** — commission is
+   computed from that figure into the `transactions` ledger.
+7. **The customer rates the professional.**
+
+Professional profiles are still fully viewable, but only reachable *from a quote* —
+never from browsing.
+
+- **Job lifecycle**: open → accepted → on the way → in progress → completed → rated.
+  Every transition notifies the other side (DB triggers → `notifications` table → push).
 - **Payments v1**: cash only. The app records the agreed price; a DB trigger computes
   platform commission (`app_settings.commission_rate`, default 10%) into a
   `transactions` ledger. No card/PSP integration yet — see backlog.

@@ -29,6 +29,30 @@ export function BookingCard({
       ? booking.professional?.business_name || booking.professional?.profile?.full_name
       : booking.customer?.full_name;
 
+  // Money shown, in order of truth: what was actually charged, then the accepted
+  // quote range, then the legacy single price on pre-quote-model rows.
+  const num = (v: number | string | null | undefined): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = typeof v === "string" ? parseFloat(v) : v;
+    return Number.isNaN(n) ? null : n;
+  };
+  const finalPrice = num(booking.final_price);
+  const min = num(booking.price_min);
+  const max = num(booking.price_max);
+  const legacy = num(booking.price);
+  const moneyText =
+    finalPrice != null
+      ? formatPrice(finalPrice)
+      : min != null && max != null
+        ? min === max
+          ? formatPrice(min)
+          : `${formatPrice(min)} – ${formatPrice(max)}`
+        : legacy != null
+          ? formatPrice(legacy)
+          : "";
+
+  const isUrgent = booking.urgency === "same_day";
+
   return (
     <Pressable
       onPress={() => router.push((href ?? `/booking/${booking.id}`) as any)}
@@ -72,7 +96,29 @@ export function BookingCard({
             ) : null}
           </View>
         </View>
-        <Badge label={t(STATUS_KEY[booking.status])} tone={STATUS_TONE[booking.status]} />
+        <View style={{ alignItems: "flex-start", gap: 4 }}>
+          <Badge label={t(STATUS_KEY[booking.status])} tone={STATUS_TONE[booking.status]} />
+          {/* how soon it was asked for — urgent jobs have to be spottable at a glance */}
+          <View
+            style={{
+              ...ROW,
+              gap: 5,
+              backgroundColor: isUrgent ? colors.warnTint : colors.chip,
+              borderRadius: radius.full,
+              paddingHorizontal: 10,
+              paddingVertical: 3,
+            }}
+          >
+            <MaterialCommunityIcons
+              name={isUrgent ? "flash" : "calendar-clock"}
+              size={12}
+              color={isUrgent ? colors.warn : colors.muted}
+            />
+            <Text style={{ color: isUrgent ? colors.warn : colors.muted, fontSize: 11, fontWeight: "700" }}>
+              {t(isUrgent ? "urgencyUrgentTag" : "urgencyScheduledTag")}
+            </Text>
+          </View>
+        </View>
       </View>
 
       {booking.description ? (
@@ -86,8 +132,8 @@ export function BookingCard({
           <Ionicons name="time-outline" size={13} color={colors.faint} />
           <Text style={{ color: colors.faint, fontSize: 12 }}>{formatTime(booking.created_at, lang)}</Text>
         </View>
-        {booking.price != null ? (
-          <Text style={{ color: colors.brand, fontSize: 15, fontWeight: "800" }}>{formatPrice(booking.price)}</Text>
+        {moneyText ? (
+          <Text style={{ color: colors.brand, fontSize: 15, fontWeight: "800" }}>{moneyText}</Text>
         ) : null}
       </View>
     </Pressable>

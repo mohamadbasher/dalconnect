@@ -2,18 +2,25 @@ import Link from "next/link";
 import { S } from "@/lib/strings";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatDateTime, formatPrice, shortId } from "@/lib/format";
+import { formatDateTime, formatFinalOrRange, formatPrice, shortId } from "@/lib/format";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { BookingStatusBadge, ReportStatusBadge } from "@/components/StatusBadge";
-import type { BookingStatus, ReportStatus } from "@/lib/types";
+import {
+  BookingStatusBadge,
+  ReportStatusBadge,
+  UrgencyBadge,
+} from "@/components/StatusBadge";
+import type { BookingStatus, BookingUrgency, ReportStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 type LatestBooking = {
   id: string;
   status: BookingStatus;
-  price: number | null;
+  urgency: BookingUrgency;
+  price_min: number | null;
+  price_max: number | null;
+  final_price: number | null;
   created_at: string;
   customer: { full_name: string } | null;
   professional: { business_name: string } | null;
@@ -99,7 +106,7 @@ export default async function OverviewPage() {
     db
       .from("bookings")
       .select(
-        `id, status, price, created_at,
+        `id, status, urgency, price_min, price_max, final_price, created_at,
          customer:profiles!bookings_customer_id_fkey(full_name),
          professional:professionals!bookings_professional_id_fkey(business_name),
          category:categories(name_ar)`,
@@ -172,6 +179,7 @@ export default async function OverviewPage() {
                     <th>{S.colCustomer}</th>
                     <th>{S.colProfessional}</th>
                     <th>{S.colCategory}</th>
+                    <th>{S.colUrgency}</th>
                     <th>{S.colPrice}</th>
                     <th>{S.colStatus}</th>
                     <th>{S.colCreated}</th>
@@ -192,7 +200,13 @@ export default async function OverviewPage() {
                       <td>{b.customer?.full_name || S.none}</td>
                       <td>{b.professional?.business_name || S.none}</td>
                       <td>{b.category?.name_ar || S.none}</td>
-                      <td>{formatPrice(b.price)}</td>
+                      <td>
+                        <UrgencyBadge urgency={b.urgency} />
+                      </td>
+                      {/* Final agreed price once it exists, else the quote range */}
+                      <td className="whitespace-nowrap" dir="ltr">
+                        {formatFinalOrRange(b.final_price, b.price_min, b.price_max)}
+                      </td>
                       <td>
                         <BookingStatusBadge status={b.status} />
                       </td>

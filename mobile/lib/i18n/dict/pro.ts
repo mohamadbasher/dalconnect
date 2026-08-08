@@ -16,7 +16,6 @@ export const pro: Dict = {
     ar: "لن تصلك طلبات جديدة وأنت غير متاح",
     he: "כל עוד אינכם זמינים לא יגיעו אליכם בקשות חדשות",
   },
-  directBookingsTitle: { ar: "حجوزات مباشرة لك", he: "הזמנות ישירות עבורך" },
   openRequestsTitle: { ar: "طلبات مفتوحة بالقرب منك", he: "בקשות פתוחות באזורך" },
   accept: { ar: "قبول", he: "אישור" },
   reject: { ar: "رفض", he: "דחייה" },
@@ -26,8 +25,6 @@ export const pro: Dict = {
     he: "הלקוח יקבל הודעה שההזמנה נדחתה. אי אפשר לבטל את הפעולה.",
   },
   sendOffer: { ar: "إرسال عرض سعر", he: "שליחת הצעת מחיר" },
-  offerPriceLabel: { ar: "السعر (₪)", he: "מחיר (₪)" },
-  offerPricePlaceholder: { ar: "مثلاً 250", he: "לדוגמה 250" },
   offerEtaLabel: { ar: "متى تستطيع الوصول؟", he: "תוך כמה זמן תגיעו?" },
   etaCustom: { ar: "وقت آخر", he: "זמן אחר" },
   etaMinutesPlaceholder: { ar: "بالدقائق", he: "בדקות" },
@@ -38,7 +35,6 @@ export const pro: Dict = {
   },
   offerSent: { ar: "تم إرسال عرضك للعميل", he: "ההצעה נשלחה ללקוח" },
   alreadyOffered: { ar: "سبق أن أرسلت عرضاً لهذا الطلب", he: "כבר שלחתם הצעה לבקשה הזו" },
-  invalidPrice: { ar: "أدخل سعراً صحيحاً", he: "הזינו מחיר תקין" },
   yourOffer: { ar: "عرضك", he: "ההצעה שלך" },
   noOpenRequests: { ar: "لا توجد طلبات مفتوحة حالياً", he: "אין כרגע בקשות פתוחות" },
   noOpenRequestsHint: {
@@ -53,6 +49,36 @@ export const pro: Dict = {
   offerAccepted: { ar: "عرض مقبول", he: "הצעה התקבלה" },
   offerRejected: { ar: "عرض مرفوض", he: "הצעה נדחתה" },
   offerWithdrawn: { ar: "عرض مسحوب", he: "הצעה בוטלה" },
+
+  // ---------- quoting (request-and-quote model) ----------
+  quoteUrgent: { ar: "عاجل — اليوم", he: "דחוף — היום" },
+  quoteScheduled: { ar: "بموعد محدد", he: "במועד מתוזמן" },
+  quotePreferredTime: { ar: "الموعد المفضّل", he: "מועד מועדף" },
+  quoteMinLabel: { ar: "من (₪)", he: "מ־ (₪)" },
+  quoteMaxLabel: { ar: "إلى (₪)", he: "עד (₪)" },
+  quoteMinPlaceholder: { ar: "200", he: "200" },
+  quoteMaxPlaceholder: { ar: "350", he: "350" },
+  quoteRangeHint: {
+    ar: "العميل يرى النطاق فقط — السعر النهائي تتفقان عليه بالهاتف",
+    he: "הלקוח רואה רק את הטווח — את המחיר הסופי תסכמו בטלפון",
+  },
+  quoteRangeRequired: {
+    ar: "أدخل أقل سعر وأعلى سعر",
+    he: "הזינו מחיר מינימלי ומקסימלי",
+  },
+  quoteRangeInvalid: {
+    ar: "أدخل مبلغين صحيحين أكبر من صفر",
+    he: "הזינו שני סכומים תקינים הגדולים מאפס",
+  },
+  quoteRangeOrder: {
+    ar: "أقل سعر يجب ألا يتجاوز أعلى سعر",
+    he: "המחיר המינימלי לא יכול להיות גבוה מהמקסימלי",
+  },
+  quoteAgreedRange: { ar: "نطاق السعر المتفق عليه", he: "טווח המחיר שסוכם" },
+  quoteFinalOnPhone: {
+    ar: "اتفق مع العميل على السعر النهائي بالهاتف",
+    he: "סכמו עם הלקוח את המחיר הסופי בטלפון",
+  },
 
   // ---------- jobs tab ----------
   proSegActive: { ar: "الحالية", he: "פעילות" },
@@ -78,11 +104,27 @@ export const pro: Dict = {
   imOnMyWay: { ar: "أنا في الطريق", he: "אני בדרך" },
   startWorking: { ar: "بدء العمل", he: "התחלת העבודה" },
   finishJob: { ar: "إنهاء العمل", he: "סיום העבודה" },
-  finishConfirmTitle: { ar: "إنهاء العمل؟", he: "לסיים את העבודה?" },
-  finishConfirmMsg: {
-    ar: "سيتم تسجيل العمل كمكتمل واحتساب عمولة المنصة، وسيُطلب من العميل تقييمك.",
-    he: "העבודה תסומן כהושלמה, עמלת הפלטפורמה תחושב והלקוח יתבקש לדרג אתכם.",
+  proWhatsApp: { ar: "واتساب", he: "וואטסאפ" },
+  proChatInApp: { ar: "المراسلة داخل التطبيق", he: "צ׳אט באפליקציה" },
+  proContactLocked: {
+    ar: "يظهر رقم العميل بعد قبول عرضك",
+    he: "מספר הלקוח יופיע לאחר שההצעה תתקבל",
   },
+  proContactUnavailable: {
+    ar: "تعذّر جلب رقم العميل — اسحب للتحديث",
+    he: "לא הצלחנו לטעון את מספר הלקוח — משכו לרענון",
+  },
+  proFinalPriceTitle: { ar: "السعر النهائي", he: "המחיר הסופי" },
+  proFinalPriceLabel: { ar: "المبلغ الذي اتفقتما عليه (₪)", he: "הסכום שסוכם (₪)" },
+  proFinalPriceHint: {
+    ar: "أدخل المبلغ الذي تقاضيته فعلاً من العميل — عمولة المنصة تُحتسب على أساسه.",
+    he: "הזינו את הסכום שגביתם בפועל מהלקוח — עמלת הפלטפורמה מחושבת לפיו.",
+  },
+  proFinalPriceInvalid: {
+    ar: "أدخل مبلغاً صحيحاً أكبر من صفر",
+    he: "הזינו סכום תקין הגדול מאפס",
+  },
+  proFinalPriceConfirm: { ar: "تأكيد وإنهاء العمل", he: "אישור וסיום העבודה" },
   earningsForJob: { ar: "أرباحك من هذا العمل", he: "הרווח שלך מהעבודה" },
   grossAmount: { ar: "المبلغ الإجمالي", he: "סכום כולל" },
   netAmount: { ar: "الصافي لك", he: "נטו עבורך" },

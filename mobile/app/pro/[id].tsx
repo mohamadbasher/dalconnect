@@ -145,7 +145,6 @@ export default function ProProfileScreen() {
   const [pro, setPro] = useState<ProCardType | null>(null);
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [isFav, setIsFav] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
@@ -159,7 +158,7 @@ export default function ProProfileScreen() {
     if (!proId) return;
     try {
       setError(false);
-      const [pRes, gRes, rRes, fRes] = await Promise.all([
+      const [pRes, gRes, rRes] = await Promise.all([
         supabase.from("professionals").select(PRO_SELECT).eq("id", proId).maybeSingle(),
         supabase
           .from("gallery_items")
@@ -172,20 +171,11 @@ export default function ProProfileScreen() {
           .eq("professional_id", proId)
           .order("created_at", { ascending: false })
           .limit(10),
-        uid && uid !== proId
-          ? supabase
-              .from("favorites")
-              .select("professional_id")
-              .eq("customer_id", uid)
-              .eq("professional_id", proId)
-              .maybeSingle()
-          : Promise.resolve({ data: null, error: null } as any),
       ]);
       if (pRes.error) throw pRes.error;
       setPro(pRes.data ? mapPro(pRes.data) : null);
       setGallery((gRes.data as GalleryItem[]) ?? []);
       setReviews((rRes.data as Review[]) ?? []);
-      setIsFav(!!fRes.data);
     } catch {
       setError(true);
     }
@@ -199,25 +189,6 @@ export default function ProProfileScreen() {
     setRefreshing(true);
     await load();
     setRefreshing(false);
-  };
-
-  const toggleFav = async () => {
-    if (!uid || !pro) return;
-    const next = !isFav;
-    setIsFav(next); // optimistic
-    if (next) {
-      const { error: err } = await supabase
-        .from("favorites")
-        .insert({ customer_id: uid, professional_id: pro.id });
-      if (err) setIsFav(false);
-    } else {
-      const { error: err } = await supabase
-        .from("favorites")
-        .delete()
-        .eq("customer_id", uid)
-        .eq("professional_id", pro.id);
-      if (err) setIsFav(true);
-    }
   };
 
   const openChat = async () => {
@@ -411,13 +382,6 @@ export default function ProProfileScreen() {
       color: colors.text,
       onPress: openChat,
       busy: chatLoading,
-    },
-    {
-      key: "favorite",
-      icon: isFav ? "heart" : "heart-outline",
-      label: t("proFavorite"),
-      color: isFav ? colors.danger : colors.text,
-      onPress: toggleFav,
     },
     { key: "share", icon: "share-social-outline", label: t("share"), color: colors.text, onPress: sharePro },
     {

@@ -2,11 +2,11 @@ import Link from "next/link";
 import { S } from "@/lib/strings";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatDateTime, formatPrice, shortId } from "@/lib/format";
+import { formatAmount, formatDateTime, formatPriceRange, shortId } from "@/lib/format";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { BookingStatusBadge } from "@/components/StatusBadge";
-import type { BookingStatus } from "@/lib/types";
+import { BookingStatusBadge, UrgencyBadge } from "@/components/StatusBadge";
+import type { BookingStatus, BookingUrgency } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,14 @@ const TABS: { key: string; label: string; statuses: BookingStatus[] | null }[] =
 type BookingRow = {
   id: string;
   status: BookingStatus;
-  price: number | null;
+  urgency: BookingUrgency;
+  /** Snapshotted at creation — 0 until the owner prices requests in /settings. */
+  service_fee: number | null;
+  /** The accepted quote's range. */
+  price_min: number | null;
+  price_max: number | null;
+  /** What was actually charged; commission is computed from it. */
+  final_price: number | null;
   commission: number | null;
   created_at: string;
   customer: { full_name: string } | null;
@@ -43,7 +50,8 @@ export default async function BookingsPage({
   let query = db
     .from("bookings")
     .select(
-      `id, status, price, commission, created_at,
+      `id, status, urgency, service_fee, price_min, price_max, final_price,
+       commission, created_at,
        customer:profiles!bookings_customer_id_fkey(full_name),
        professional:professionals!bookings_professional_id_fkey(business_name),
        category:categories(name_ar),
@@ -56,6 +64,10 @@ export default async function BookingsPage({
 
   const { data } = await query;
   const bookings = (data ?? []) as unknown as BookingRow[];
+
+  // The request fee is 0 on every row until the owner sets a price list, and a
+  // column of "—" is just noise — so the column only appears once it earns it.
+  const showServiceFee = bookings.some((b) => Number(b.service_fee ?? 0) > 0);
 
   return (
     <div>
@@ -91,7 +103,10 @@ export default async function BookingsPage({
                   <th>{S.colProfessional}</th>
                   <th>{S.colCategory}</th>
                   <th>{S.colCity}</th>
-                  <th>{S.colPrice}</th>
+                  <th>{S.colUrgency}</th>
+                  <th>{S.colQuoteRange}</th>
+                  <th>{S.colFinalPrice}</th>
+                  {showServiceFee && <th>{S.colServiceFee}</th>}
                   <th>{S.colCommission}</th>
                   <th>{S.colStatus}</th>
                   <th>{S.colCreated}</th>
@@ -113,8 +128,19 @@ export default async function BookingsPage({
                     <td>{b.professional?.business_name || S.none}</td>
                     <td>{b.category?.name_ar || S.none}</td>
                     <td>{b.city?.name_ar || S.none}</td>
-                    <td>{formatPrice(b.price)}</td>
-                    <td>{formatPrice(b.commission)}</td>
+                    <td>
+                      <UrgencyBadge urgency={b.urgency} />
+                    </td>
+                    <td className="whitespace-nowrap" dir="ltr">
+                      {formatPriceRange(b.price_min, b.price_max)}
+                    </td>
+                    <td className="whitespace-nowrap font-semibold">
+                      {formatAmount(b.final_price)}
+                    </td>
+                    {showServiceFee && (
+                      <td className="whitespace-nowrap">{formatAmount(b.service_fee)}</td>
+                    )}
+                    <td>{formatAmount(b.commission)}</td>
                     <td>
                       <BookingStatusBadge status={b.status} />
                     </td>

@@ -1,4 +1,5 @@
-// Professional card — used in home, search results and favorites.
+// Professional card — shown for pros who have quoted a request.
+// Customers don't browse a directory, so this never appears in a search result.
 import React from "react";
 import { Pressable, Text, View } from "react-native";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";

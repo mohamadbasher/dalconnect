@@ -67,15 +67,35 @@ const { session, profile, professional, mode, loading, isPro, isAdmin,
 - Primary CTAs: brand Button (has the branded glow shadow). Generous whitespace, no visual clutter.
 - The global TopBar is rendered by the tab layout. Stack screens you create should render their own simple header: back arrow (Ionicons "arrow-forward" — RTL!) + title, padding-top via `useSafeAreaInsets`.
 
-## Routes that exist or are being built in parallel (link to them freely)
+## Routes (link to them freely)
 - `/(auth)/welcome`, `/(auth)/sign-in`, `/(auth)/sign-up`
-- Tabs: `/(tabs)` (customer home), `/(tabs)/bookings`, `/(tabs)/favorites`, `/(tabs)/dashboard` (pro), `/(tabs)/jobs` (pro), `/(tabs)/earnings` (pro), `/(tabs)/chat`, `/(tabs)/profile`
-- `/search?categoryId=&q=`, `/category/[id]`, `/pro/[id]` (public professional profile)
-- `/create-booking?categoryId=&proId=` (proId absent ⇒ open request), `/booking/[id]` (customer view), `/job/[id]` (pro view)
-- `/chat/[id]` (conversation), `/notifications`, `/edit-profile`, `/become-pro`, `/pro-settings`, `/report?userId=&bookingId=`
+- Tabs: `/(tabs)` (customer home = service picker), `/(tabs)/bookings` (my requests), `/(tabs)/dashboard` (pro), `/(tabs)/jobs` (pro), `/(tabs)/earnings` (pro), `/(tabs)/chat`, `/(tabs)/profile`
+- `/search` (finds SERVICES, not professionals), `/create-booking?categoryId=`, `/booking/[id]` (customer view), `/job/[id]` (pro view)
+- `/pro/[id]` — professional profile, reachable ONLY from a quote they submitted
+- `/chat/[id]`, `/notifications`, `/legal`, `/edit-profile`, `/become-pro`, `/pro-settings`, `/report?userId=&bookingId=`
+- `/category/[id]` is a legacy redirect into `/create-booking`; there is no favorites route.
+
+## THE PRODUCT MODEL (read this before changing any flow)
+Customers **never browse or search professionals** — there is no directory. They pick a
+service, describe the job, and choose **urgency** (`same_day`, which costs them more, or
+`scheduled`). Every available professional in that trade is invited to **quote**: a price
+**range** (`price_min`–`price_max`) + `eta_minutes` + a message. The customer compares the
+responders (profile, rating, jobs done), **accepts one** (`accept_offer`) or declines
+individual quotes (`decline_offer`, request stays open). Only on acceptance is the
+professional's **phone revealed** — via `get_contact_phone(booking_id)`, which returns the
+other party's number and only to the two parties. They arrange details directly. On
+completion the pro records `final_price`; commission is computed from that.
+
+Never reintroduce: a professional directory/search, direct booking of a chosen pro,
+favorites, or a single fixed `price` on a quote.
 
 ## Booking status flow
-`open` (collecting offers) → accept_offer RPC → `accepted` → pro taps → `on_the_way` → `in_progress` → `completed` → customer rates → trigger sets `rated`. Direct bookings start at `pending` → pro accepts (`accepted`) or rejects (`rejected`). Customer can cancel (`cancelled`) while open/pending/accepted. Status writes are plain `update bookings set status=...` by the allowed party (RLS enforces parties; the DB has triggers for notifications/ledger — don't duplicate them client-side).
+`open` (collecting quotes) → `accept_offer` RPC → `accepted` → pro advances → `on_the_way`
+→ `in_progress` → `completed` (pro sets `final_price`) → customer rates → trigger sets
+`rated`. Customer can cancel (`cancelled`) while open/accepted. `pending` and `rejected`
+survive only on legacy rows from the old direct-booking model. Status writes are plain
+`update bookings set status=...` by the allowed party (RLS enforces parties; DB triggers
+handle notifications/ledger — don't duplicate them client-side).
 
 ## Realtime
 `messages`, `offers`, `bookings`, `notifications`, `conversations` are in the realtime publication. Subscribe with `supabase.channel(...).on("postgres_changes", {event, schema:"public", table, filter}, cb).subscribe()` and clean up with `supabase.removeChannel(channel)`.

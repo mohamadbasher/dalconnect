@@ -1,7 +1,13 @@
-// Booking detail — customer view. Live status timeline, offers (while open),
-// professional card once assigned, details, and status-driven actions.
+// Booking detail — customer view of a REQUEST.
+//
+// The flow this screen serves: the customer posts a request, every nearby
+// professional in the trade answers with a quote (a price RANGE + arrival time
+// + a note), the customer compares them, accepts one — and only then does the
+// professional's phone number appear so the two can settle the details by
+// phone or WhatsApp.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Linking,
@@ -21,17 +27,38 @@ import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { getOrCreateConversation } from "../../lib/chat";
+import { callPhone, fetchContactPhone, openWhatsApp } from "../../lib/contact";
 import { formatDateTime, STATUS_KEY } from "../../lib/format";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
-import { Avatar, Badge, Button, Card, EmptyState, Input, Loading, SectionHeader, StarRating } from "../../components/ui";
+import {
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  InlineNote,
+  Input,
+  Loading,
+  SectionHeader,
+  StarRating,
+} from "../../components/ui";
+import { OfferCard, proDisplayName, quotePriceText } from "../../components/OfferCard";
+import type { QuoteOffer } from "../../components/OfferCard";
 import { RateModal } from "../../components/RateModal";
 import { useToast } from "../../components/Toast";
-import type { Booking, BookingStatus, Offer, Review } from "../../lib/types";
+import type { Booking, BookingStatus, Review } from "../../lib/types";
 
 type MCIName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 /** cancelling is off the table once the pro is actually working (or the job is done) */
 const CANCEL_LOCKED: BookingStatus[] = ["on_the_way", "in_progress", "completed", "rated"];
+
+/**
+ * Statuses in which the two parties have been introduced: the quote was
+ * accepted, so `get_contact_phone` will hand over the number. Mirrors the
+ * whitelist inside the RPC — keep them in sync.
+ */
+const CONTACT_UNLOCKED: BookingStatus[] = ["accepted", "on_the_way", "in_progress", "completed", "rated"];
 
 function stepIndex(status: BookingStatus): number {
   switch (status) {
@@ -52,7 +79,21 @@ function stepIndex(status: BookingStatus): number {
   }
 }
 
-/** subtle looping opacity pulse for the "waiting for offers" state */
+/** cheapest first; quotes with no price at all sink to the bottom */
+function quoteSortKey(o: QuoteOffer): number {
+  const raw = o.price_min ?? o.price ?? o.price_max;
+  if (raw === null || raw === undefined) return Number.POSITIVE_INFINITY;
+  const n = typeof raw === "string" ? parseFloat(raw) : raw;
+  return Number.isNaN(n) ? Number.POSITIVE_INFINITY : n;
+}
+
+function toNumber(v: number | string | null | undefined): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = typeof v === "string" ? parseFloat(v) : v;
+  return Number.isNaN(n) ? null : n;
+}
+
+/** subtle looping opacity pulse for the "waiting for quotes" state */
 function Pulse({ children }: { children: React.ReactNode }) {
   const opacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -78,11 +119,14 @@ export default function BookingDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [booking, setBooking] = useState<Booking | null>(null);
-  const [offers, setOffers] = useState<Offer[]>([]);
+  const [offers, setOffers] = useState<QuoteOffer[]>([]);
   const [review, setReview] = useState<Review | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [busyOfferId, setBusyOfferId] = useState<string | null>(null);
+  const [showDeclined, setShowDeclined] = useState(false);
+  const [contactPhone, setContactPhone] = useState<string | null>(null);
+  const [contactLoading, setContactLoading] = useState(false);
   const [rateVisible, setRateVisible] = useState(false);
   const [cancelVisible, setCancelVisible] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
@@ -94,19 +138,25 @@ export default function BookingDetail() {
     if (!id) return;
     const { data } = await supabase
       .from("bookings")
-      .select("*, category:categories(*), city:cities(*), professional:professionals(*, profile:profiles!professionals_id_fkey(*))")
+      .select(
+        "*, category:categories(*), city:cities(*), professional:professionals(*, profile:profiles!professionals_id_fkey(*))"
+      )
       .eq("id", id)
       .maybeSingle();
     const b = (data as unknown as Booking | null) ?? null;
     setBooking(b);
     if (b?.status === "open") {
+      // pending AND rejected: a declined quote is still shown (collapsed) so the
+      // customer can see what they turned down rather than watching it vanish.
       const { data: offs } = await supabase
         .from("offers")
-        .select("*, professional:professionals(*, profile:profiles!professionals_id_fkey(*))")
+        .select(
+          "*, professional:professionals(*, profile:profiles!professionals_id_fkey(*), city:cities(*))"
+        )
         .eq("booking_id", id)
-        .eq("status", "pending")
+        .in("status", ["pending", "rejected"])
         .order("created_at", { ascending: true });
-      setOffers((offs as unknown as Offer[]) ?? []);
+      setOffers((offs as unknown as QuoteOffer[]) ?? []);
     } else {
       setOffers([]);
     }
@@ -146,33 +196,95 @@ export default function BookingDetail() {
     };
   }, [id, load]);
 
+  const bookingStatus = booking?.status ?? null;
+  const bookingProId = booking?.professional_id ?? null;
+  const contactUnlocked = bookingStatus !== null && CONTACT_UNLOCKED.includes(bookingStatus);
+
+  // Contact reveal: the number is never in the row payload, it is fetched from
+  // an RPC that re-checks entitlement, so it re-runs whenever the status moves.
+  useEffect(() => {
+    if (!id || !contactUnlocked || !bookingProId) {
+      setContactPhone(null);
+      setContactLoading(false);
+      return;
+    }
+    let alive = true;
+    setContactLoading(true);
+    fetchContactPhone(id)
+      .then((phone) => {
+        if (!alive) return;
+        setContactPhone(phone);
+        setContactLoading(false);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setContactPhone(null);
+        setContactLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id, contactUnlocked, bookingProId]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await load();
     setRefreshing(false);
   };
 
-  const acceptOffer = (offer: Offer) => {
-    const name = offer.professional?.business_name || offer.professional?.profile?.full_name || "";
-    Alert.alert(t("acceptOffer"), t("acceptOfferConfirm", { name, price: formatPrice(offer.price) }), [
-      { text: t("cancel"), style: "cancel" },
-      {
-        text: t("confirm"),
-        onPress: async () => {
-          setAcceptingId(offer.id);
-          const { error } = await supabase.rpc("accept_offer", { p_offer_id: offer.id });
-          setAcceptingId(null);
-          if (error) {
-            toast.error(t("error"));
-            load();
-            return;
-          }
-          toast.success(t("offerAcceptedToast", { name }));
-          load();
-        },
-      },
-    ]);
-  };
+  const pendingOffers = useMemo(
+    () => offers.filter((o) => o.status === "pending").sort((a, b) => quoteSortKey(a) - quoteSortKey(b)),
+    [offers]
+  );
+  const declinedOffers = useMemo(() => offers.filter((o) => o.status === "rejected"), [offers]);
+
+  const acceptOffer = useCallback(
+    (offer: QuoteOffer) => {
+      const name = proDisplayName(offer.professional) || t("quoteUnknownPro");
+      const price = quotePriceText(offer.price_min, offer.price_max, offer.price);
+      Alert.alert(
+        t("quoteAcceptTitle"),
+        price ? t("quoteAcceptConfirm", { name, price }) : t("quoteAcceptConfirmNoPrice", { name }),
+        [
+          { text: t("cancel"), style: "cancel" },
+          {
+            text: t("confirm"),
+            onPress: async () => {
+              setBusyOfferId(offer.id);
+              const { error } = await supabase.rpc("accept_offer", { p_offer_id: offer.id });
+              setBusyOfferId(null);
+              if (error) {
+                toast.error(t("error"));
+                await load();
+                return;
+              }
+              toast.success(t("quoteAcceptedToast", { name }));
+              await load();
+            },
+          },
+        ]
+      );
+    },
+    [load, t, toast]
+  );
+
+  const declineOffer = useCallback(
+    async (offer: QuoteOffer) => {
+      if (busyOfferId) return;
+      const name = proDisplayName(offer.professional) || t("quoteUnknownPro");
+      setBusyOfferId(offer.id);
+      const { error } = await supabase.rpc("decline_offer", { p_offer_id: offer.id });
+      setBusyOfferId(null);
+      if (error) {
+        toast.error(t("error"));
+        await load();
+        return;
+      }
+      toast.info(t("quoteDeclinedToast", { name }));
+      await load();
+    },
+    [busyOfferId, load, t, toast]
+  );
 
   const doCancel = async () => {
     if (!booking || cancelling) return;
@@ -244,11 +356,26 @@ export default function BookingDetail() {
   const isTerminated = booking.status === "cancelled" || booking.status === "rejected";
   const currentIdx = stepIndex(booking.status);
   const pro = booking.professional ?? null;
-  const proName = pro ? pro.business_name || pro.profile?.full_name || "" : "";
-  const proPhone = pro?.profile?.phone ?? "";
+  const proName = proDisplayName(pro);
   const canCancel = booking.status === "open" || booking.status === "pending" || booking.status === "accepted";
   const cancelLocked = CANCEL_LOCKED.includes(booking.status);
-  const showProCard = pro !== null && booking.status !== "open";
+  const isDone = booking.status === "completed" || booking.status === "rated";
+  // Contact card takes over once a quote is accepted; the plain pro card still
+  // covers direct bookings awaiting the pro's answer (and terminated ones).
+  const showContactCard = contactUnlocked && pro !== null;
+  const showPlainProCard = pro !== null && !contactUnlocked && booking.status !== "open";
+
+  const serviceFee = toNumber(booking.service_fee) ?? 0;
+  const finalPrice = toNumber(booking.final_price);
+  const agreedRange = quotePriceText(booking.price_min, booking.price_max, booking.price);
+  // Completed jobs show what was actually charged; everything else shows the
+  // range that was agreed when the quote was accepted.
+  const showFinal = isDone && finalPrice !== null;
+  const priceText = showFinal ? formatPrice(finalPrice) : agreedRange;
+  const priceLabel = showFinal ? t("quoteFinalPriceLabel") : t("quoteAgreedPriceLabel");
+  const whatsappMessage = t("quoteWhatsAppPrefill", {
+    title: booking.title || (booking.category ? loc(booking.category, "name") : ""),
+  });
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -337,11 +464,123 @@ export default function BookingDetail() {
           </View>
         )}
 
-        {/* offers — only while collecting */}
+        {/* ---------- contact card: the payoff of accepting a quote ---------- */}
+        {showContactCard ? (
+          <View style={{ gap: spacing.md }}>
+            <SectionHeader title={t("quoteContactTitle")} />
+            <Card style={{ gap: spacing.lg }}>
+              <Pressable
+                onPress={() => (booking.professional_id ? router.push(`/pro/${booking.professional_id}` as never) : null)}
+                style={({ pressed }) => ({ ...ROW, gap: 12, opacity: pressed ? 0.7 : 1 })}
+              >
+                <Avatar uri={pro?.profile?.avatar_url} name={proName} size={52} />
+                <View style={{ flex: 1, gap: 3 }}>
+                  <View style={{ ...ROW, gap: 6 }}>
+                    <Text
+                      numberOfLines={1}
+                      style={[RTL_TEXT, { color: colors.text, fontSize: 16, fontWeight: "800", flexShrink: 1 }]}
+                    >
+                      {proName || t("quoteUnknownPro")}
+                    </Text>
+                    {pro?.verification_status === "approved" ? (
+                      <MaterialCommunityIcons name="check-decagram" size={16} color={colors.info} />
+                    ) : null}
+                  </View>
+                  <View style={{ ...ROW, gap: 6 }}>
+                    <StarRating rating={pro?.rating_avg ?? 0} size={13} />
+                    <Text style={{ color: colors.muted, fontSize: 12 }}>
+                      {(pro?.rating_count ?? 0) > 0
+                        ? `${Number(pro?.rating_avg ?? 0).toFixed(1)} (${pro?.rating_count ?? 0})`
+                        : t("quoteNoRatingYet")}
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-back" size={18} color={colors.faint} />
+              </Pressable>
+
+              {priceText ? (
+                <View
+                  style={{
+                    backgroundColor: colors.brandTint,
+                    borderRadius: radius.md,
+                    paddingVertical: spacing.md,
+                    paddingHorizontal: spacing.lg,
+                    ...ROW,
+                    justifyContent: "space-between",
+                    gap: 10,
+                  }}
+                >
+                  <Text style={[RTL_TEXT, { color: colors.brandDark, fontSize: 12.5, fontWeight: "700" }]}>
+                    {priceLabel}
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}
+                    style={{ color: colors.brand, fontSize: 20, fontWeight: "800", flexShrink: 1 }}
+                  >
+                    {priceText}
+                  </Text>
+                </View>
+              ) : null}
+
+              {contactLoading ? (
+                <View style={{ paddingVertical: spacing.md, alignItems: "center" }}>
+                  <ActivityIndicator color={colors.brand} />
+                </View>
+              ) : contactPhone ? (
+                <View style={{ gap: spacing.md }}>
+                  <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, lineHeight: 18 }]}>
+                    {t("quoteContactHint")}
+                  </Text>
+                  <View style={{ ...ROW, gap: 10 }}>
+                    <Button
+                      title={t("call")}
+                      icon="phone"
+                      style={{ flex: 1 }}
+                      onPress={() => {
+                        callPhone(contactPhone);
+                      }}
+                    />
+                    <Button
+                      title={t("quoteWhatsApp")}
+                      icon="whatsapp"
+                      variant="success"
+                      style={{ flex: 1 }}
+                      onPress={() => {
+                        openWhatsApp(contactPhone, whatsappMessage);
+                      }}
+                    />
+                  </View>
+                  <Button
+                    title={t("quoteChatInApp")}
+                    icon="chat-outline"
+                    variant="outline"
+                    loading={chatLoading}
+                    onPress={openChat}
+                  />
+                </View>
+              ) : (
+                <View style={{ gap: spacing.md }}>
+                  <InlineNote tone="warn" icon="lock-outline" text={t("quoteContactPending")} />
+                  <Button
+                    title={t("quoteChatInApp")}
+                    icon="chat-outline"
+                    variant="outline"
+                    loading={chatLoading}
+                    onPress={openChat}
+                  />
+                </View>
+              )}
+            </Card>
+          </View>
+        ) : null}
+
+        {/* ---------- quotes — only while the request is collecting ---------- */}
         {booking.status === "open" ? (
           <View style={{ gap: spacing.md }}>
-            <SectionHeader title={t("offersTitle", { n: offers.length })} />
-            {offers.length === 0 ? (
+            <SectionHeader title={t("quotesTitle", { n: pendingOffers.length })} />
+            {pendingOffers.length === 0 ? (
               <View style={{ gap: spacing.md }}>
                 <Pulse>
                   <Card style={{ alignItems: "center", gap: 8, paddingVertical: spacing.xl }}>
@@ -362,67 +601,82 @@ export default function BookingDetail() {
                 </View>
               </View>
             ) : (
-              offers.map((offer) => {
-                const op = offer.professional;
-                const opName = op ? op.business_name || op.profile?.full_name || "" : "";
-                return (
-                  <Card key={offer.id} style={{ gap: spacing.md }}>
-                    <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
-                      <View style={{ ...ROW, gap: 10, flexShrink: 1 }}>
-                        <Avatar uri={op?.profile?.avatar_url} name={opName} size={42} />
-                        <View style={{ flexShrink: 1 }}>
+              <View style={{ gap: spacing.md }}>
+                <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12, lineHeight: 18 }]}>
+                  {t("quotesCompareHint")}
+                </Text>
+                {pendingOffers.map((offer) => (
+                  <OfferCard
+                    key={offer.id}
+                    offer={offer}
+                    busy={busyOfferId === offer.id}
+                    disabled={busyOfferId !== null && busyOfferId !== offer.id}
+                    onAccept={acceptOffer}
+                    onDecline={declineOffer}
+                  />
+                ))}
+              </View>
+            )}
+
+            {/* declined quotes stay visible (collapsed) — a quote that simply
+                disappeared would read as a bug */}
+            {declinedOffers.length > 0 ? (
+              <View style={{ gap: spacing.sm }}>
+                <Pressable
+                  onPress={() => setShowDeclined((v) => !v)}
+                  style={({ pressed }) => ({ ...ROW, gap: 6, opacity: pressed ? 0.6 : 1, paddingVertical: 4 })}
+                >
+                  <Ionicons name={showDeclined ? "chevron-up" : "chevron-down"} size={15} color={colors.muted} />
+                  <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, fontWeight: "700" }]}>
+                    {t("quotesDeclinedTitle", { n: declinedOffers.length })}
+                  </Text>
+                </Pressable>
+                {showDeclined ? (
+                  <View style={{ gap: spacing.sm }}>
+                    <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12, lineHeight: 18 }]}>
+                      {t("quotesDeclinedHint")}
+                    </Text>
+                    {declinedOffers.map((offer) => {
+                      const name = proDisplayName(offer.professional);
+                      const price = quotePriceText(offer.price_min, offer.price_max, offer.price);
+                      return (
+                        <View
+                          key={offer.id}
+                          style={{
+                            ...ROW,
+                            gap: 10,
+                            backgroundColor: colors.chip,
+                            borderRadius: radius.md,
+                            padding: spacing.md,
+                            opacity: 0.75,
+                          }}
+                        >
+                          <Avatar uri={offer.professional?.profile?.avatar_url} name={name} size={32} />
                           <Text
                             numberOfLines={1}
-                            style={[RTL_TEXT, { color: colors.text, fontSize: 14.5, fontWeight: "800" }]}
+                            style={[RTL_TEXT, { flex: 1, color: colors.muted, fontSize: 13.5, fontWeight: "700" }]}
                           >
-                            {opName}
+                            {name || t("quoteUnknownPro")}
                           </Text>
-                          <View style={{ ...ROW, gap: 5 }}>
-                            <StarRating rating={op?.rating_avg ?? 0} size={12} />
-                            <Text style={{ color: colors.muted, fontSize: 11.5 }}>
-                              {(op?.rating_avg ?? 0).toFixed(1)} ({op?.rating_count ?? 0})
+                          {price ? (
+                            <Text
+                              style={{ color: colors.faint, fontSize: 13, textDecorationLine: "line-through" }}
+                            >
+                              {price}
                             </Text>
-                          </View>
+                          ) : null}
                         </View>
-                      </View>
-                      <Text style={{ color: colors.brand, fontSize: 19, fontWeight: "800" }}>
-                        {formatPrice(offer.price)}
-                      </Text>
-                    </View>
-                    {offer.eta_minutes != null ? (
-                      <View style={{ ...ROW }}>
-                        <Badge label={t("etaChip", { n: offer.eta_minutes })} tone="info" />
-                      </View>
-                    ) : null}
-                    {offer.message ? (
-                      <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, lineHeight: 19 }]}>
-                        {offer.message}
-                      </Text>
-                    ) : null}
-                    <View style={{ ...ROW, justifyContent: "space-between" }}>
-                      <Pressable onPress={() => router.push(`/pro/${offer.professional_id}` as never)} hitSlop={8}>
-                        <Text style={{ color: colors.brand, fontSize: 13, fontWeight: "700" }}>
-                          {t("viewProfile")}
-                        </Text>
-                      </Pressable>
-                      <Button
-                        title={t("acceptOffer")}
-                        small
-                        icon="check"
-                        loading={acceptingId === offer.id}
-                        disabled={acceptingId !== null && acceptingId !== offer.id}
-                        onPress={() => acceptOffer(offer)}
-                      />
-                    </View>
-                  </Card>
-                );
-              })
-            )}
+                      );
+                    })}
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         ) : null}
 
-        {/* assigned professional */}
-        {showProCard ? (
+        {/* assigned professional, before contact unlocks (direct bookings) */}
+        {showPlainProCard ? (
           <View style={{ gap: spacing.md }}>
             <SectionHeader title={t("proSectionTitle")} />
             <Card style={{ gap: spacing.md }}>
@@ -434,10 +688,10 @@ export default function BookingDetail() {
                 <View style={{ flex: 1 }}>
                   <View style={{ ...ROW, gap: 6 }}>
                     <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 15.5, fontWeight: "800" }]}>
-                      {proName}
+                      {proName || t("quoteUnknownPro")}
                     </Text>
                     {pro?.verification_status === "approved" ? (
-                      <Ionicons name="shield-checkmark" size={15} color={colors.info} />
+                      <MaterialCommunityIcons name="check-decagram" size={15} color={colors.info} />
                     ) : null}
                   </View>
                   <View style={{ ...ROW, gap: 6 }}>
@@ -448,26 +702,7 @@ export default function BookingDetail() {
                   </View>
                 </View>
               </Pressable>
-              <View style={{ ...ROW, gap: 10 }}>
-                {proPhone ? (
-                  <Button
-                    title={t("call")}
-                    icon="phone"
-                    small
-                    variant="success"
-                    style={{ flex: 1 }}
-                    onPress={() => Linking.openURL(`tel:${proPhone}`).catch(() => {})}
-                  />
-                ) : null}
-                <Button
-                  title={t("message")}
-                  icon="chat"
-                  small
-                  loading={chatLoading}
-                  style={{ flex: 1 }}
-                  onPress={openChat}
-                />
-              </View>
+              <Button title={t("message")} icon="chat" small loading={chatLoading} onPress={openChat} />
             </Card>
           </View>
         ) : null}
@@ -497,6 +732,15 @@ export default function BookingDetail() {
                 {booking.title || (booking.category ? loc(booking.category, "name") : t("category"))}
               </Text>
             </View>
+
+            {/* how soon it's needed */}
+            <View style={{ ...ROW, gap: 6 }}>
+              <Badge
+                label={booking.urgency === "same_day" ? t("quoteUrgencyUrgent") : t("quoteUrgencyScheduled")}
+                tone={booking.urgency === "same_day" ? "danger" : "info"}
+              />
+            </View>
+
             {booking.description ? (
               <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13.5, lineHeight: 20 }]}>
                 {booking.description}
@@ -545,25 +789,47 @@ export default function BookingDetail() {
                 {t("scheduledFor")}: {booking.scheduled_at ? formatDateTime(booking.scheduled_at, lang) : t("asap")}
               </Text>
             </View>
-            {booking.price != null ? (
+
+            {/* money summary: agreed range / final price, plus the request fee.
+                A zero fee renders nothing — "₪0" would only confuse. */}
+            {priceText || serviceFee > 0 ? (
               <View
                 style={{
                   borderTopWidth: 1,
                   borderTopColor: colors.border,
                   paddingTop: spacing.md,
-                  gap: 6,
+                  gap: 8,
                 }}
               >
-                <View style={{ ...ROW, justifyContent: "space-between" }}>
-                  <Text style={{ color: colors.text, fontSize: 14, fontWeight: "700" }}>{t("price")}</Text>
-                  <Text style={{ color: colors.brand, fontSize: 19, fontWeight: "800" }}>
-                    {formatPrice(booking.price)}
-                  </Text>
-                </View>
-                <View style={{ ...ROW, gap: 6 }}>
-                  <Badge label={t("cash")} tone="success" />
-                  <Text style={{ color: colors.faint, fontSize: 12 }}>{t("cashNote")}</Text>
-                </View>
+                {priceText ? (
+                  <>
+                    <View style={{ ...ROW, justifyContent: "space-between", gap: 10 }}>
+                      <Text style={{ color: colors.text, fontSize: 14, fontWeight: "700" }}>{priceLabel}</Text>
+                      <Text
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.7}
+                        style={{ color: colors.brand, fontSize: 19, fontWeight: "800", flexShrink: 1 }}
+                      >
+                        {priceText}
+                      </Text>
+                    </View>
+                    <View style={{ ...ROW, gap: 6 }}>
+                      <Badge label={t("cash")} tone="success" />
+                      <Text style={{ color: colors.faint, fontSize: 12, flexShrink: 1 }}>
+                        {showFinal ? t("cashNote") : t("quoteRangeNote")}
+                      </Text>
+                    </View>
+                  </>
+                ) : null}
+                {serviceFee > 0 ? (
+                  <View style={{ ...ROW, gap: 6 }}>
+                    <Ionicons name="receipt-outline" size={14} color={colors.faint} />
+                    <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12, flexShrink: 1 }]}>
+                      {t("quoteServiceFee", { amount: formatPrice(serviceFee) })}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             ) : null}
           </Card>
@@ -621,9 +887,7 @@ export default function BookingDetail() {
               <Ionicons name="lock-closed-outline" size={17} color={colors.warn} />
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={[RTL_TEXT, { color: colors.warn, fontSize: 12.5, lineHeight: 18 }]}>
-                  {booking.status === "completed" || booking.status === "rated"
-                    ? t("cancelLockedDone")
-                    : t("cancelLockedWorking")}
+                  {isDone ? t("cancelLockedDone") : t("cancelLockedWorking")}
                 </Text>
                 {booking.professional_id ? (
                   <Text style={[RTL_TEXT, { color: colors.warn, fontSize: 12.5, fontWeight: "800" }]}>

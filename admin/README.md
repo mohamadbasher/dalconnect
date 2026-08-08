@@ -34,12 +34,12 @@ Arabic-RTL web dashboard for the DalConnect service marketplace (Next.js 15 App 
 - `/` overview stats + latest bookings & reports
 - `/users` search + ban/unban
 - `/professionals` directory + pending ID verifications (approve/reject, signed document links) + promoted ("مميّزون") professionals: featured toggle with a duration in days, expiry warnings and up/down reordering
-- `/bookings` status-filtered list, `/bookings/[id]` detail with offers, photos and admin cancel
+- `/bookings` status-filtered list of requests — urgency badge (⚡ same-day vs scheduled), the accepted quote's price range, the final agreed price and (once priced) the request fee; `/bookings/[id]` detail with the quotes received (newest first), photos and admin cancel
 - `/categories`, `/cities` inline CRUD
 - `/reviews` moderation — hide/publish toggle + delete (hidden reviews are excluded from the professional's rating by the `review_effects` DB trigger)
 - `/reports` status workflow
 - `/banners` image upload to the `banners` bucket + ordering/toggle
-- `/settings` platform commission rate
+- `/settings` platform commission rate + request fees (`fee_same_day` / `fee_scheduled` — what the customer pays to post a request). Both are stored in `app_settings.value` as bare jsonb numbers, which is what the `commission_rate()` / `request_fee()` SQL functions expect. The fee is snapshotted onto `bookings.service_fee` by the `set_request_fee` trigger at INSERT, so editing it here never rewrites past requests.
 - `/notifications` broadcast to all / customers / professionals (capped at 5000 recipients; pushes are delivered by the DB-webhook → edge function pipeline)
 - `/legal` legal-page CMS (`terms` / `privacy` / `about` / `contact`) — bilingual title + body. The mobile app ships built-in text and only uses the CMS copy when a row exists with a **non-empty body for that language**, so an empty body means "keep the built-in text".
 - `/audit` read-only activity log, newest first, 50 per page, filterable by action prefix and actor role

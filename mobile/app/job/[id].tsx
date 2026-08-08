@@ -1,9 +1,12 @@
-// Pro's live view of a booking — customer contact, details, navigation, status advance.
+// Pro's live view of a job — customer contact (revealed once accepted), the
+// agreed quote range, navigation, status advance and the final agreed price.
 import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
+  KeyboardAvoidingView,
   Linking,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -20,11 +23,12 @@ import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { getOrCreateConversation } from "../../lib/chat";
+import { callPhone, fetchContactPhone, openWhatsApp } from "../../lib/contact";
 import { formatDateTime, STATUS_KEY, STATUS_TONE } from "../../lib/format";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
-import { Avatar, Badge, Button, Card, EmptyState, Loading, SectionHeader } from "../../components/ui";
+import { Avatar, Badge, Button, Card, EmptyState, Input, Loading, SectionHeader } from "../../components/ui";
 import { useToast } from "../../components/Toast";
-import type { Booking, BookingStatus } from "../../lib/types";
+import type { Booking, BookingStatus, BookingUrgency } from "../../lib/types";
 
 const STEPS: BookingStatus[] = ["accepted", "on_the_way", "in_progress", "completed"];
 const STEP_ICONS: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = {
@@ -33,6 +37,8 @@ const STEP_ICONS: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> =
   in_progress: "hammer-wrench",
   completed: "flag-checkered",
 };
+/** the phone number is handed over only from acceptance onwards */
+const CONTACT_STATUSES: BookingStatus[] = ["accepted", "on_the_way", "in_progress", "completed", "rated"];
 
 export default function JobScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -49,6 +55,15 @@ export default function JobScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [viewerUri, setViewerUri] = useState<string | null>(null);
+
+  // contact reveal
+  const [phone, setPhone] = useState<string | null>(null);
+  const [phoneLoading, setPhoneLoading] = useState(false);
+
+  // finish-job sheet
+  const [finishOpen, setFinishOpen] = useState(false);
+  const [finalPrice, setFinalPrice] = useState("");
+  const [finalPriceError, setFinalPriceError] = useState<string | undefined>();
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -86,8 +101,29 @@ export default function JobScreen() {
     };
   }, [id]);
 
+  // the RPC hands back the OTHER party's number, and only once it's unlocked
+  const contactUnlocked = !!booking && CONTACT_STATUSES.includes(booking.status);
+  useEffect(() => {
+    let alive = true;
+    if (!id || !contactUnlocked) {
+      setPhone(null);
+      return;
+    }
+    setPhoneLoading(true);
+    fetchContactPhone(id)
+      .then((p) => {
+        if (alive) setPhone(p);
+      })
+      .finally(() => {
+        if (alive) setPhoneLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id, contactUnlocked]);
+
   const setStatus = async (next: BookingStatus, extra?: Record<string, unknown>) => {
-    if (!booking || busy) return;
+    if (!booking || busy) return false;
     setBusy(true);
     // optimistic-concurrency guard: only advance from the status we're showing
     const { data, error } = await supabase
@@ -99,14 +135,14 @@ export default function JobScreen() {
     if (error) {
       setBusy(false);
       toast.error(t("error"));
-      return;
+      return false;
     }
     if (!data?.length) {
       // status changed elsewhere (e.g. customer cancelled) — resync and say so
       await load();
       setBusy(false);
       toast.info(t("statusChangedElsewhere"));
-      return;
+      return false;
     }
     setBooking((prev) => (prev ? { ...prev, status: next, ...(extra as Partial<Booking>) } : prev));
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -114,6 +150,7 @@ export default function JobScreen() {
     // refetch so trigger-computed fields (commission, completed_at) come through
     await load();
     setBusy(false);
+    return true;
   };
 
   const openChat = async () => {
@@ -174,9 +211,57 @@ export default function JobScreen() {
   const stepIdx = STEPS.indexOf(effectiveStatus);
   const showStepper = stepIdx >= 0;
   const isDone = booking.status === "completed" || booking.status === "rated";
-  const gross = booking.price ?? 0;
+
+  // what the pro actually earns from: the final agreed price, with sensible fallbacks
+  const gross = booking.final_price ?? booking.price ?? booking.price_min ?? 0;
   const commission = booking.commission ?? Math.round(gross * 0.1 * 100) / 100;
   const net = gross - commission;
+
+  const rangeMin = booking.price_min;
+  const rangeMax = booking.price_max;
+  const rangeLabel =
+    rangeMin != null && rangeMax != null && rangeMax !== rangeMin
+      ? `${formatPrice(rangeMin)} – ${formatPrice(rangeMax)}`
+      : rangeMin != null
+        ? formatPrice(rangeMin)
+        : rangeMax != null
+          ? formatPrice(rangeMax)
+          : booking.price != null
+            ? formatPrice(booking.price)
+            : null;
+
+  const renderUrgency = (urgency: BookingUrgency) => {
+    const urgent = urgency === "same_day";
+    return (
+      <View
+        style={{
+          ...ROW,
+          gap: 4,
+          paddingHorizontal: 9,
+          paddingVertical: 4,
+          borderRadius: radius.full,
+          backgroundColor: urgent ? colors.dangerTint : colors.chip,
+          borderWidth: urgent ? 1.5 : 1,
+          borderColor: urgent ? colors.danger : colors.border,
+        }}
+      >
+        <MaterialCommunityIcons
+          name={urgent ? "lightning-bolt" : "calendar-clock"}
+          size={12}
+          color={urgent ? colors.danger : colors.muted}
+        />
+        <Text
+          style={{
+            color: urgent ? colors.danger : colors.muted,
+            fontSize: 11.5,
+            fontWeight: urgent ? "800" : "600",
+          }}
+        >
+          {t(urgent ? "quoteUrgent" : "quoteScheduled")}
+        </Text>
+      </View>
+    );
+  };
 
   const advance =
     booking.status === "accepted"
@@ -189,15 +274,24 @@ export default function JobScreen() {
 
   const onAdvance = () => {
     if (!advance) return;
-    // finishing is irreversible (ledger + commission) — keep a real confirm dialog
     if (advance.next === "completed") {
-      Alert.alert(t("finishConfirmTitle"), t("finishConfirmMsg"), [
-        { text: t("cancel"), style: "cancel" },
-        { text: t("finishJob"), onPress: () => setStatus("completed") },
-      ]);
+      // finishing writes the ledger — we need the price that was actually agreed
+      setFinalPrice(booking.price_min != null ? String(booking.price_min) : booking.price != null ? String(booking.price) : "");
+      setFinalPriceError(undefined);
+      setFinishOpen(true);
     } else {
       setStatus(advance.next);
     }
+  };
+
+  const confirmFinish = async () => {
+    const n = parseFloat(finalPrice.replace(",", "."));
+    if (!finalPrice.trim() || !Number.isFinite(n) || n <= 0) {
+      setFinalPriceError(t("proFinalPriceInvalid"));
+      return;
+    }
+    const ok = await setStatus("completed", { final_price: n });
+    if (ok) setFinishOpen(false);
   };
 
   return (
@@ -245,10 +339,10 @@ export default function JobScreen() {
           </View>
         ) : null}
 
-        {/* status + stepper */}
+        {/* status + quote range + stepper */}
         <Card style={{ gap: spacing.lg }}>
-          <View style={{ ...ROW, justifyContent: "space-between" }}>
-            <View style={{ ...ROW, gap: 8 }}>
+          <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
+            <View style={{ ...ROW, gap: 8, flexShrink: 1 }}>
               <View
                 style={{
                   width: 38,
@@ -265,12 +359,43 @@ export default function JobScreen() {
                   color={colors.brand}
                 />
               </View>
-              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 16, fontWeight: "800" }]}>
-                {booking.category ? loc(booking.category, "name") : booking.title}
-              </Text>
+              <View style={{ flexShrink: 1, gap: 4 }}>
+                <Text
+                  numberOfLines={1}
+                  style={[RTL_TEXT, { color: colors.text, fontSize: 16, fontWeight: "800" }]}
+                >
+                  {booking.category ? loc(booking.category, "name") : booking.title}
+                </Text>
+                {renderUrgency(booking.urgency)}
+              </View>
             </View>
             <Badge label={t(STATUS_KEY[booking.status])} tone={STATUS_TONE[booking.status]} />
           </View>
+
+          {/* the range the customer accepted */}
+          {rangeLabel ? (
+            <View
+              style={{
+                backgroundColor: colors.brandTint,
+                borderRadius: radius.md,
+                padding: spacing.md,
+                gap: 4,
+              }}
+            >
+              <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
+                <View style={{ ...ROW, gap: 6, flexShrink: 1 }}>
+                  <Ionicons name="cash-outline" size={16} color={colors.brand} />
+                  <Text style={[RTL_TEXT, { color: colors.brand, fontSize: 13, fontWeight: "700" }]}>
+                    {t("quoteAgreedRange")}
+                  </Text>
+                </View>
+                <Text style={{ color: colors.brand, fontSize: 18, fontWeight: "800" }}>{rangeLabel}</Text>
+              </View>
+              {!isDone ? (
+                <Text style={[RTL_TEXT, { color: colors.brand, fontSize: 12 }]}>{t("quoteFinalOnPhone")}</Text>
+              ) : null}
+            </View>
+          ) : null}
 
           {showStepper ? (
             <View style={{ ...ROW, alignItems: "flex-start" }}>
@@ -328,6 +453,7 @@ export default function JobScreen() {
             <Button title={advance.title} icon={advance.icon} loading={busy} onPress={onAdvance} />
           ) : null}
 
+          {/* legacy direct bookings (no longer created) may still arrive as `pending` */}
           {booking.status === "pending" ? (
             <View style={{ ...ROW, gap: 10 }}>
               <View style={{ flex: 1 }}>
@@ -357,12 +483,12 @@ export default function JobScreen() {
           ) : null}
         </Card>
 
-        {/* earnings (after completion) */}
-        {isDone && booking.price != null ? (
+        {/* earnings (after completion) — from the real final price */}
+        {isDone && gross > 0 ? (
           <Card style={{ gap: 10 }}>
             <SectionHeader title={t("earningsForJob")} />
             <View style={{ ...ROW, justifyContent: "space-between" }}>
-              <Text style={{ color: colors.muted, fontSize: 13.5 }}>{t("grossAmount")}</Text>
+              <Text style={{ color: colors.muted, fontSize: 13.5 }}>{t("proFinalPriceTitle")}</Text>
               <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: "700" }}>{formatPrice(gross)}</Text>
             </View>
             <View style={{ ...ROW, justifyContent: "space-between" }}>
@@ -379,52 +505,54 @@ export default function JobScreen() {
           </Card>
         ) : null}
 
-        {/* customer */}
+        {/* customer + contact */}
         <Card style={{ gap: spacing.md }}>
           <SectionHeader title={t("customerTitle")} />
-          <View style={{ ...ROW, justifyContent: "space-between", gap: 10 }}>
-            <View style={{ ...ROW, gap: 10, flexShrink: 1 }}>
-              <Avatar uri={booking.customer?.avatar_url} name={booking.customer?.full_name} size={46} />
-              <View style={{ flexShrink: 1 }}>
-                <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 15, fontWeight: "800" }]}>
-                  {booking.customer?.full_name ?? ""}
-                </Text>
-                {booking.customer?.phone ? (
-                  <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5 }]}>{booking.customer.phone}</Text>
-                ) : null}
-              </View>
-            </View>
-            <View style={{ ...ROW, gap: 8 }}>
-              {booking.customer?.phone ? (
-                <Pressable
-                  onPress={() => Linking.openURL(`tel:${booking.customer?.phone}`).catch(() => {})}
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: colors.successTint,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Ionicons name="call" size={18} color={colors.success} />
-                </Pressable>
-              ) : null}
-              <Pressable
-                onPress={openChat}
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  backgroundColor: colors.brandTint,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Ionicons name="chatbubble-ellipses" size={18} color={colors.brand} />
-              </Pressable>
+          <View style={{ ...ROW, gap: 10 }}>
+            <Avatar uri={booking.customer?.avatar_url} name={booking.customer?.full_name} size={46} />
+            <View style={{ flexShrink: 1 }}>
+              <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 15, fontWeight: "800" }]}>
+                {booking.customer?.full_name ?? ""}
+              </Text>
+              <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5 }]}>
+                {contactUnlocked
+                  ? phone ?? (phoneLoading ? t("loading") : t("proContactUnavailable"))
+                  : t("proContactLocked")}
+              </Text>
             </View>
           </View>
+
+          {contactUnlocked && phone ? (
+            <View style={{ ...ROW, gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  title={t("call")}
+                  variant="success"
+                  icon="phone"
+                  onPress={() => {
+                    callPhone(phone).then((ok) => {
+                      if (!ok) toast.error(t("error"));
+                    });
+                  }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  title={t("proWhatsApp")}
+                  variant="outline"
+                  icon="whatsapp"
+                  onPress={() => {
+                    openWhatsApp(phone).then((ok) => {
+                      if (!ok) toast.error(t("error"));
+                    });
+                  }}
+                />
+              </View>
+            </View>
+          ) : null}
+
+          {/* in-app chat stays available as the quieter option */}
+          <Button title={t("proChatInApp")} variant="ghost" small icon="chat-outline" onPress={openChat} />
         </Card>
 
         {/* details */}
@@ -469,22 +597,13 @@ export default function JobScreen() {
             </Text>
           </View>
 
-          {booking.price != null ? (
-            <View style={{ ...ROW, justifyContent: "space-between" }}>
-              <View style={{ ...ROW, gap: 6 }}>
-                <Ionicons name="cash-outline" size={16} color={colors.brand} />
-                <Text style={{ color: colors.text, fontSize: 13.5 }}>{t("agreedPrice")}</Text>
-              </View>
-              <View style={{ ...ROW, gap: 8 }}>
-                <Text style={{ color: colors.brand, fontSize: 17, fontWeight: "800" }}>
-                  {formatPrice(booking.price)}
-                </Text>
-                <Badge label={t("cash")} tone="gold" />
-              </View>
+          {!isDone ? (
+            <View style={{ ...ROW, gap: 8 }}>
+              <Badge label={t("cash")} tone="gold" />
+              <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12, flexShrink: 1 }]}>
+                {t("proCashNote")}
+              </Text>
             </View>
-          ) : null}
-          {booking.price != null && !isDone ? (
-            <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12 }]}>{t("proCashNote")}</Text>
           ) : null}
 
           {booking.lat != null && booking.lng != null && !isDone ? (
@@ -492,6 +611,62 @@ export default function JobScreen() {
           ) : null}
         </Card>
       </ScrollView>
+
+      {/* finish job — the final agreed price drives the ledger */}
+      <Modal visible={finishOpen} transparent animationType="slide" onRequestClose={() => setFinishOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+          <Pressable style={{ flex: 1, backgroundColor: colors.overlay }} onPress={() => setFinishOpen(false)} />
+          <View
+            style={{
+              backgroundColor: colors.card,
+              borderTopLeftRadius: radius.xl,
+              borderTopRightRadius: radius.xl,
+              padding: spacing.xl,
+              paddingBottom: insets.bottom + spacing.xl,
+              gap: spacing.lg,
+            }}
+          >
+            <View style={{ ...ROW, justifyContent: "space-between" }}>
+              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 17, fontWeight: "800" }]}>
+                {t("proFinalPriceTitle")}
+              </Text>
+              <Pressable onPress={() => setFinishOpen(false)} hitSlop={8}>
+                <Ionicons name="close" size={22} color={colors.muted} />
+              </Pressable>
+            </View>
+
+            <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, lineHeight: 19 }]}>
+              {t("proFinalPriceHint")}
+            </Text>
+
+            <Input
+              label={t("proFinalPriceLabel")}
+              placeholder={t("quoteMinPlaceholder")}
+              keyboardType="numeric"
+              value={finalPrice}
+              onChangeText={(v) => {
+                setFinalPrice(v);
+                setFinalPriceError(undefined);
+              }}
+              error={finalPriceError}
+            />
+
+            {rangeLabel ? (
+              <View style={{ ...ROW, justifyContent: "space-between" }}>
+                <Text style={{ color: colors.muted, fontSize: 12.5 }}>{t("quoteAgreedRange")}</Text>
+                <Text style={{ color: colors.text, fontSize: 13, fontWeight: "700" }}>{rangeLabel}</Text>
+              </View>
+            ) : null}
+
+            <Button
+              title={t("proFinalPriceConfirm")}
+              icon="flag-checkered"
+              loading={busy}
+              onPress={confirmFinish}
+            />
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* fullscreen photo viewer */}
       <Modal visible={!!viewerUri} transparent animationType="fade" onRequestClose={() => setViewerUri(null)}>

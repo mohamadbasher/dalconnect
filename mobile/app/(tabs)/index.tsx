@@ -1,4 +1,5 @@
-// Customer home — greeting, search, banners, category grid, open-request CTA, top-rated pros.
+// Customer home — a service picker. There is no professional directory: the
+// customer taps the trade they need and we collect quotes for them.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -6,6 +7,7 @@ import {
   Linking,
   Pressable,
   RefreshControl,
+  ScrollView,
   Text,
   useWindowDimensions,
   View,
@@ -21,11 +23,7 @@ import { fetchCategories } from "../../lib/refdata";
 import { STATUS_KEY, STATUS_TONE } from "../../lib/format";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
 import { Badge, Button, EmptyState, SectionHeader, SkeletonList } from "../../components/ui";
-import { ProCard, isFeaturedNow } from "../../components/ProCard";
-import type { Banner, Booking, Category, ProCard as ProCardType } from "../../lib/types";
-
-const PRO_SELECT =
-  "*, profile:profiles!professionals_id_fkey!inner(*), professional_categories(category:categories(*)), city:cities(*)";
+import type { Banner, Booking, Category } from "../../lib/types";
 
 /** icons come from the DB — never trust them blindly */
 function safeIcon(icon?: string | null): keyof typeof MaterialCommunityIcons.glyphMap {
@@ -37,17 +35,6 @@ function safeIcon(icon?: string | null): keyof typeof MaterialCommunityIcons.gly
 const ACTIVE_STATUSES = ["open", "pending", "accepted", "on_the_way", "in_progress"];
 /** statuses that change in real time while the customer watches */
 const LIVE_STATUSES = new Set(["open", "on_the_way", "in_progress"]);
-
-function mapPro(row: any): ProCardType {
-  return {
-    ...row,
-    profile: row.profile ?? undefined,
-    categories: (row.professional_categories ?? [])
-      .map((pc: any) => pc.category)
-      .filter(Boolean),
-    city: row.city ?? null,
-  };
-}
 
 // ---------- subtle pulse dot for live booking statuses ----------
 function PulseDot({ color }: { color: string }) {
@@ -117,6 +104,7 @@ function BannerCarousel({ banners, width }: { banners: Banner[]; width: number }
         const i = Math.round(e.nativeEvent.contentOffset.x / width);
         if (i >= 0 && i < banners.length) indexRef.current = i;
       }}
+      style={{ flexGrow: 0 }}
       renderItem={({ item }) => (
         <Pressable
           onPress={() => openBanner(item)}
@@ -147,8 +135,6 @@ export default function HomeScreen() {
 
   const [banners, setBanners] = useState<Banner[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
-  const [pros, setPros] = useState<ProCardType[]>([]);
-  const [featured, setFeatured] = useState<ProCardType[]>([]);
   const [activeBooking, setActiveBooking] = useState<Booking | null>(null);
   const [offersCount, setOffersCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -182,52 +168,19 @@ export default function HomeScreen() {
 
   const load = useCallback(async () => {
     setError(false);
-    const nowIso = new Date().toISOString();
     // Load each section independently so one failure never blanks the others.
-    const [bRes, cRes, pRes, fRes] = await Promise.allSettled([
+    const [bRes, cRes] = await Promise.allSettled([
       supabase.from("banners").select("*").eq("is_active", true).order("sort_order"),
       fetchCategories(true),
-      supabase
-        .from("professionals")
-        .select(PRO_SELECT)
-        .eq("profile.is_banned", false)
-        .order("rating_avg", { ascending: false })
-        .order("rating_count", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(5),
-      // promoted placement (paid): featured flag + a window that hasn't expired
-      supabase
-        .from("professionals")
-        .select(PRO_SELECT)
-        .eq("profile.is_banned", false)
-        .eq("featured", true)
-        .or(`featured_until.is.null,featured_until.gt.${nowIso}`)
-        .order("featured_sort", { ascending: true })
-        .order("rating_avg", { ascending: false })
-        .limit(10),
       loadActiveBooking(),
     ]);
 
     if (bRes.status === "fulfilled" && !bRes.value.error) {
       setBanners((bRes.value.data as Banner[]) ?? []);
     }
+    // The service grid *is* the screen — only its failure is worth a retry.
     if (cRes.status === "fulfilled") setCats(cRes.value);
-
-    if (fRes.status === "fulfilled" && !fRes.value.error) {
-      // re-check client-side: the window can lapse between the query and render
-      setFeatured(
-        ((fRes.value.data as any[]) ?? []).filter((r) => isFeaturedNow(r)).map(mapPro)
-      );
-    } else {
-      setFeatured([]); // promo row is never essential — just hide it
-    }
-
-    if (pRes.status === "fulfilled" && !pRes.value.error) {
-      setPros(((pRes.value.data as any[]) ?? []).map(mapPro));
-    } else {
-      // Only the pros list is essential enough to surface a retry.
-      setError(true);
-    }
+    else setError(true);
   }, [loadActiveBooking]);
 
   useEffect(() => {
@@ -271,42 +224,17 @@ export default function HomeScreen() {
   const tileGap = spacing.md;
   const tileW = (width - spacing.lg * 2 - tileGap * 3) / 4;
   const bannerW = width - spacing.lg * 2;
-  const featuredW = Math.min(width - spacing.lg * 2, width * 0.84);
 
-  const header = (
-    <View style={{ gap: spacing.lg }}>
-      {/* 1 — prompt heading */}
-      <View style={{ marginTop: spacing.xs }}>
-        <Text style={[RTL_TEXT, { color: colors.text, fontSize: 22, fontWeight: "800" }]}>
-          {t("homeSubtitle")}
-        </Text>
-      </View>
-
-      {/* 2 — readonly search bar -> /search */}
-      <Pressable
-        onPress={() => router.push("/search")}
-        style={({ pressed }) => [
-          {
-            ...ROW,
-            gap: 8,
-            backgroundColor: colors.card,
-            borderRadius: radius.full,
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-            borderWidth: 1,
-            borderColor: colors.border,
-            ...shadows.card,
-            transform: [{ scale: pressed ? 0.98 : 1 }],
-          },
-        ]}
-      >
-        <Ionicons name="search" size={18} color={colors.faint} />
-        <Text style={[RTL_TEXT, { flex: 1, color: colors.faint, fontSize: 14.5 }]}>
-          {t("homeSearchPlaceholder")}
-        </Text>
-      </Pressable>
-
-      {/* 2.5 — current request card (live booking status at a glance) */}
+  return (
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colors.bg }}
+      contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg }}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} colors={[colors.brand]} />
+      }
+      showsVerticalScrollIndicator={false}
+    >
+      {/* 1 — current request card: the single most useful thing on the screen */}
       {activeBooking ? (
         <Pressable
           onPress={() => router.push(`/booking/${activeBooking.id}`)}
@@ -358,85 +286,41 @@ export default function HomeScreen() {
         </Pressable>
       ) : null}
 
-      {/* 3 — banners */}
-      {banners.length > 0 ? <BannerCarousel banners={banners} width={bannerW} /> : null}
-
-      {/* 4 — categories grid */}
-      <View>
-        <SectionHeader title={t("categories")} action={t("seeAll")} onAction={() => router.push("/search")} />
-        <View style={{ flexDirection: "row-reverse", flexWrap: "wrap", gap: tileGap }}>
-          {cats.slice(0, 11).map((cat) => (
-            <Pressable
-              key={cat.id}
-              onPress={() => router.push(`/category/${cat.id}`)}
-              style={({ pressed }) => [
-                { width: tileW, alignItems: "center", gap: 6, transform: [{ scale: pressed ? 0.95 : 1 }] },
-              ]}
-            >
-              <View
-                style={{
-                  width: 60,
-                  height: 60,
-                  borderRadius: radius.tile,
-                  backgroundColor: colors.card,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  ...shadows.card,
-                }}
-              >
-                <MaterialCommunityIcons name={safeIcon(cat.icon)} size={26} color={colors.brand} />
-              </View>
-              <Text
-                numberOfLines={2}
-                style={{
-                  color: colors.text,
-                  fontSize: 11.5,
-                  fontWeight: "600",
-                  textAlign: "center",
-                  minHeight: 30,
-                }}
-              >
-                {loc(cat, "name")}
-              </Text>
-            </Pressable>
-          ))}
-          {/* more tile */}
-          <Pressable
-            onPress={() => router.push("/search")}
-            style={({ pressed }) => [
-              { width: tileW, alignItems: "center", gap: 6, transform: [{ scale: pressed ? 0.95 : 1 }] },
-            ]}
-          >
-            <View
-              style={{
-                width: 60,
-                height: 60,
-                borderRadius: radius.tile,
-                backgroundColor: colors.brandTint,
-                alignItems: "center",
-                justifyContent: "center",
-                ...shadows.card,
-              }}
-            >
-              <MaterialCommunityIcons name="dots-horizontal" size={26} color={colors.brand} />
-            </View>
-            <Text
-              numberOfLines={2}
-              style={{
-                color: colors.brand,
-                fontSize: 11.5,
-                fontWeight: "700",
-                textAlign: "center",
-                minHeight: 30,
-              }}
-            >
-              {t("homeMoreTile")}
-            </Text>
-          </Pressable>
-        </View>
+      {/* 2 — prompt heading */}
+      <View style={{ marginTop: activeBooking ? 0 : spacing.xs }}>
+        <Text style={[RTL_TEXT, { color: colors.text, fontSize: 22, fontWeight: "800" }]}>
+          {t("homeSubtitle")}
+        </Text>
       </View>
 
-      {/* error banner */}
+      {/* 3 — readonly search bar -> /search (services, not people) */}
+      <Pressable
+        onPress={() => router.push("/search")}
+        style={({ pressed }) => [
+          {
+            ...ROW,
+            gap: 8,
+            backgroundColor: colors.card,
+            borderRadius: radius.full,
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            borderWidth: 1,
+            borderColor: colors.border,
+            ...shadows.card,
+            transform: [{ scale: pressed ? 0.98 : 1 }],
+          },
+        ]}
+      >
+        <Ionicons name="search" size={18} color={colors.faint} />
+        <Text style={[RTL_TEXT, { flex: 1, color: colors.faint, fontSize: 14.5 }]}>
+          {t("homeSearchPlaceholder")}
+        </Text>
+      </Pressable>
+
+      {/* 4 — banners */}
+      {banners.length > 0 ? <BannerCarousel banners={banners} width={bannerW} /> : null}
+
+      {/* error banner — the grid failed to load */}
       {error ? (
         <View
           style={{
@@ -453,50 +337,61 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      {/* 5.5 — promoted professionals (paid placement); hidden entirely when empty */}
-      {featured.length > 0 ? (
-        <View>
-          <SectionHeader title={t("homeFeatured")} />
-          <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12, marginBottom: spacing.sm }]}>
-            {t("homeFeaturedSubtitle")}
-          </Text>
-          <FlatList
-            data={featured}
-            horizontal
-            inverted
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(p) => `featured-${p.id}`}
-            contentContainerStyle={{ gap: spacing.md }}
-            style={{ flexGrow: 0 }}
-            renderItem={({ item }) => (
-              <View style={{ width: featuredW }}>
-                <ProCard pro={item} featured />
-              </View>
-            )}
-          />
-        </View>
-      ) : null}
-
-      {/* 6 — top rated */}
-      <SectionHeader title={t("homeTopRated")} action={t("seeAll")} onAction={() => router.push("/search")} />
-    </View>
-  );
-
-  return (
-    <FlatList
-      style={{ flex: 1, backgroundColor: colors.bg }}
-      contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md }}
-      data={pros}
-      keyExtractor={(p) => p.id}
-      renderItem={({ item }) => <ProCard pro={item} />}
-      ListHeaderComponent={header}
-      ListEmptyComponent={
-        !error ? <EmptyState icon="account-hard-hat" title={t("homeNoProsYet")} /> : null
-      }
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} colors={[colors.brand]} />
-      }
-      showsVerticalScrollIndicator={false}
-    />
+      {/* 5 — the hero: every service we cover, 4 per row */}
+      <View>
+        <SectionHeader title={t("homeServicesTitle")} action={t("search")} onAction={() => router.push("/search")} />
+        <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, marginBottom: spacing.lg, lineHeight: 18 }]}>
+          {t("homeServicesSubtitle")}
+        </Text>
+        {cats.length === 0 ? (
+          !error ? <EmptyState icon="shape-outline" title={t("homeNoServices")} /> : null
+        ) : (
+          <View
+            style={{
+              flexDirection: "row-reverse",
+              flexWrap: "wrap",
+              columnGap: tileGap,
+              rowGap: spacing.lg,
+            }}
+          >
+            {cats.map((cat) => (
+              <Pressable
+                key={cat.id}
+                onPress={() => router.push(`/create-booking?categoryId=${cat.id}`)}
+                style={({ pressed }) => [
+                  { width: tileW, alignItems: "center", gap: 7, transform: [{ scale: pressed ? 0.95 : 1 }] },
+                ]}
+              >
+                <View
+                  style={{
+                    width: 60,
+                    height: 60,
+                    borderRadius: radius.tile,
+                    backgroundColor: colors.card,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    ...shadows.card,
+                  }}
+                >
+                  <MaterialCommunityIcons name={safeIcon(cat.icon)} size={26} color={colors.brand} />
+                </View>
+                <Text
+                  numberOfLines={2}
+                  style={{
+                    color: colors.text,
+                    fontSize: 11.5,
+                    fontWeight: "600",
+                    textAlign: "center",
+                    minHeight: 30,
+                  }}
+                >
+                  {loc(cat, "name")}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </View>
+    </ScrollView>
   );
 }

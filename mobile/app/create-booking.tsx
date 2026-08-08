@@ -1,5 +1,6 @@
-// Create booking — single-scroll form. `proId` present ⇒ direct booking
-// (status 'pending'), otherwise an open request collecting offers.
+// Create request — single-scroll form. Every request is an OPEN request: the
+// customer picks a service and an urgency, and every nearby professional in
+// that trade is invited to quote. Customers never pick the professional.
 import React, { useEffect, useMemo, useState } from "react";
 import {
   FlatList,
@@ -18,7 +19,7 @@ import MapView, { Marker } from "react-native-maps";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useTheme, radius, spacing } from "../lib/theme";
+import { useTheme, radius, spacing, formatPrice } from "../lib/theme";
 import { useI18n } from "../lib/i18n";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
@@ -27,10 +28,10 @@ import { uploadImage } from "../lib/upload";
 import { getCurrentPosition } from "../lib/location";
 import { TIME_SLOTS } from "../lib/hours";
 import { ROW, RTL_TEXT } from "../lib/rtl";
-import { Avatar, Button, Card, Chip, Input, Loading, SearchBar, SectionHeader, StarRating } from "../components/ui";
+import { Badge, Button, Card, Chip, Input, Loading, SearchBar, SectionHeader } from "../components/ui";
 import { CalendarModal } from "../components/CalendarModal";
 import { useToast } from "../components/Toast";
-import type { Category, City, Professional, Profile } from "../lib/types";
+import type { BookingUrgency, Category, City } from "../lib/types";
 
 const MAX_PHOTOS = 4;
 
@@ -42,7 +43,7 @@ function composeAt(day: Date, slot: string): Date {
   return out;
 }
 
-type ProWithProfile = Professional & { profile?: Profile };
+type Fees = Record<BookingUrgency, number>;
 
 export default function CreateBooking() {
   const { colors, shadows } = useTheme();
@@ -51,18 +52,17 @@ export default function CreateBooking() {
   const toast = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ categoryId?: string; proId?: string }>();
-  const proId = params.proId || null;
+  const params = useLocalSearchParams<{ categoryId?: string }>();
 
-  // reference / pro data
+  // reference data
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [cities, setCities] = useState<City[]>([]);
-  const [pro, setPro] = useState<ProWithProfile | null>(null);
-  const [proCatIds, setProCatIds] = useState<number[] | null>(null);
+  /** platform request fee per urgency — the owner sets these later, 0 means "not priced yet" */
+  const [fees, setFees] = useState<Fees>({ same_day: 0, scheduled: 0 });
 
   // form state
   const [categoryId, setCategoryId] = useState<number | null>(
-    params.categoryId ? Number(params.categoryId) : null
+    params.categoryId ? Number(params.categoryId) || null : null
   );
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -71,7 +71,7 @@ export default function CreateBooking() {
   const [address, setAddress] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
-  const [scheduleMode, setScheduleMode] = useState<"asap" | "pick">("asap");
+  const [urgency, setUrgency] = useState<BookingUrgency | null>(null);
   const [pickedDate, setPickedDate] = useState<Date | null>(null);
   const [pickedSlot, setPickedSlot] = useState<string | null>(null);
 
@@ -81,7 +81,12 @@ export default function CreateBooking() {
   const [citySearch, setCitySearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ n: number; total: number } | null>(null);
-  const [errors, setErrors] = useState<{ category?: string; description?: string; schedule?: string }>({});
+  const [errors, setErrors] = useState<{
+    category?: string;
+    description?: string;
+    urgency?: string;
+    schedule?: string;
+  }>({});
 
   useEffect(() => {
     (async () => {
@@ -95,40 +100,24 @@ export default function CreateBooking() {
     })();
   }, []);
 
+  // request fees come from the price list; a missing/failed read just means "no price shown"
   useEffect(() => {
-    if (!proId) return;
     (async () => {
-      const { data } = await supabase
-        .from("professionals")
-        .select("*, profile:profiles!professionals_id_fkey(*)")
-        .eq("id", proId)
-        .maybeSingle();
-      setPro((data as ProWithProfile | null) ?? null);
-      const { data: pcs } = await supabase
-        .from("professional_categories")
-        .select("category_id")
-        .eq("professional_id", proId);
-      setProCatIds(((pcs as { category_id: number }[] | null) ?? []).map((r) => r.category_id));
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("key, value")
+        .in("key", ["fee_same_day", "fee_scheduled"]);
+      if (error || !data) return;
+      const next: Fees = { same_day: 0, scheduled: 0 };
+      for (const row of data as { key: string; value: unknown }[]) {
+        const n = Number(row.value);
+        if (Number.isNaN(n)) continue;
+        if (row.key === "fee_same_day") next.same_day = n;
+        if (row.key === "fee_scheduled") next.scheduled = n;
+      }
+      setFees(next);
     })();
-  }, [proId]);
-
-  const shownCategories = useMemo(() => {
-    if (!categories) return [];
-    if (proId && proCatIds && proCatIds.length > 0) return categories.filter((c) => proCatIds.includes(c.id));
-    return categories;
-  }, [categories, proId, proCatIds]);
-
-  // if the pro offers a single category, preselect it
-  useEffect(() => {
-    if (proId && shownCategories.length === 1 && categoryId === null) setCategoryId(shownCategories[0].id);
-  }, [proId, shownCategories, categoryId]);
-
-  // direct booking: drop a preselected category the pro doesn't offer
-  useEffect(() => {
-    if (proId && proCatIds && proCatIds.length > 0 && categoryId !== null && !proCatIds.includes(categoryId)) {
-      setCategoryId(null);
-    }
-  }, [proId, proCatIds, categoryId]);
+  }, []);
 
   // prefill the city from the customer's profile while none is chosen
   useEffect(() => {
@@ -137,32 +126,31 @@ export default function CreateBooking() {
     }
   }, [cityId, profile?.city_id, cities]);
 
-  const todayStart = useMemo(() => {
+  /** scheduled means "tomorrow or later" — today belongs to the same-day option */
+  const tomorrowStart = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 1);
     return d;
   }, []);
 
-  const isToday = (d: Date) => d.toDateString() === new Date().toDateString();
-
-  const dateLabel = (d: Date) => {
-    const formatted = d.toLocaleDateString(lang === "ar" ? "ar" : "he-IL", {
+  const dateLabel = (d: Date) =>
+    d.toLocaleDateString(lang === "ar" ? "ar" : "he-IL", {
       weekday: "long",
       day: "numeric",
       month: "long",
     });
-    return isToday(d) ? `${t("today")} · ${formatted}` : formatted;
-  };
 
   // ---- completion meter (guidance, not a gate) ----
   const checks = useMemo(
     () => [
       { key: "category", label: t("meterCategory"), done: categoryId !== null },
       { key: "description", label: t("meterDescription"), done: description.trim().length >= 10 },
+      { key: "urgency", label: t("meterUrgency"), done: urgency !== null },
       { key: "place", label: t("meterPlace"), done: cityId !== null || address.trim().length > 0 },
       { key: "photos", label: t("meterPhotos"), done: photos.length > 0 },
     ],
-    [t, categoryId, description, cityId, address, photos.length]
+    [t, categoryId, description, urgency, cityId, address, photos.length]
   );
   const doneCount = checks.filter((c) => c.done).length;
   const pct = Math.round((doneCount / checks.length) * 100);
@@ -193,6 +181,19 @@ export default function CreateBooking() {
     Haptics.selectionAsync().catch(() => {});
   };
 
+  const chooseUrgency = (u: BookingUrgency) => {
+    setUrgency(u);
+    setErrors((e) => ({ ...e, urgency: undefined, schedule: undefined }));
+    if (u === "same_day") {
+      // a same-day job has no preferred slot — it is "now"
+      setPickedDate(null);
+      setPickedSlot(null);
+    } else if (!pickedDate) {
+      setCalendarOpen(true);
+    }
+    Haptics.selectionAsync().catch(() => {});
+  };
+
   const selectedCity = cities.find((c) => c.id === cityId) ?? null;
   const filteredCities = useMemo(() => {
     const q = citySearch.trim();
@@ -206,9 +207,13 @@ export default function CreateBooking() {
     const errs: typeof errors = {};
     if (!categoryId) errs.category = t("categoryRequired");
     if (description.trim().length < 10) errs.description = t("descriptionTooShort");
-    if (scheduleMode === "pick" && (pickedDate === null || pickedSlot === null)) errs.schedule = t("pickTimeError");
-    if (scheduleMode === "pick" && pickedDate !== null && pickedSlot !== null) {
-      if (composeAt(pickedDate, pickedSlot).getTime() <= Date.now()) errs.schedule = t("pastTimeError");
+    if (urgency === null) errs.urgency = t("urgencyRequired");
+    if (urgency === "scheduled") {
+      // the preferred slot is optional, but half a slot is not a slot
+      if ((pickedDate === null) !== (pickedSlot === null)) errs.schedule = t("pickTimeError");
+      else if (pickedDate !== null && pickedSlot !== null) {
+        if (composeAt(pickedDate, pickedSlot).getTime() <= Date.now()) errs.schedule = t("pastTimeError");
+      }
     }
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
@@ -229,16 +234,16 @@ export default function CreateBooking() {
       }
       setUploadProgress(null);
       let scheduledAt: string | null = null;
-      if (scheduleMode === "pick" && pickedDate !== null && pickedSlot !== null) {
+      if (urgency === "scheduled" && pickedDate !== null && pickedSlot !== null) {
         scheduledAt = composeAt(pickedDate, pickedSlot).toISOString();
       }
       const { data, error } = await supabase
         .from("bookings")
         .insert({
-          type: proId ? "direct" : "open",
-          status: proId ? "pending" : "open",
+          type: "open",
+          status: "open",
           customer_id: uid,
-          professional_id: proId,
+          professional_id: null,
           category_id: categoryId,
           title: title.trim(),
           description: description.trim(),
@@ -248,11 +253,13 @@ export default function CreateBooking() {
           lat: coords?.lat ?? null,
           lng: coords?.lng ?? null,
           scheduled_at: scheduledAt,
+          urgency,
+          // service_fee is stamped by the set_request_fee trigger from the price list
         })
         .select("id")
         .single();
       if (error) throw error;
-      toast.success(proId ? t("bookingSentToast") : t("requestPostedToast"));
+      toast.success(t("requestPostedToast"));
       router.replace(`/booking/${(data as { id: string }).id}` as never);
     } catch {
       toast.error(t("bookingFailedToast"));
@@ -265,7 +272,72 @@ export default function CreateBooking() {
   if (!session) return <Redirect href="/(auth)/welcome" />;
   if (categories === null) return <Loading />;
 
-  const now = new Date();
+  /** one of the two urgency cards */
+  const urgencyCard = (
+    value: BookingUrgency,
+    icon: keyof typeof MaterialCommunityIcons.glyphMap,
+    titleKey: string,
+    subKey: string
+  ) => {
+    const active = urgency === value;
+    const fee = fees[value];
+    const costsMore = value === "same_day" && fees.same_day > fees.scheduled;
+    return (
+      <Pressable
+        onPress={() => chooseUrgency(value)}
+        style={({ pressed }) => [
+          {
+            backgroundColor: active ? colors.brandTint : colors.card,
+            borderRadius: radius.lg,
+            borderWidth: 1.5,
+            borderColor: active ? colors.brand : colors.border,
+            padding: spacing.lg,
+            gap: 10,
+            ...shadows.card,
+            transform: [{ scale: pressed ? 0.98 : 1 }],
+          },
+        ]}
+      >
+        <View style={{ ...ROW, gap: 12 }}>
+          <View
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: radius.tile,
+              backgroundColor: active ? colors.brand : colors.chip,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <MaterialCommunityIcons name={icon} size={26} color={active ? colors.onBrand : colors.brand} />
+          </View>
+          <View style={{ flex: 1, gap: 3 }}>
+            <View style={{ ...ROW, gap: 8 }}>
+              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 16.5, fontWeight: "800" }]}>
+                {t(titleKey)}
+              </Text>
+              {costsMore ? <Badge label={t("urgencyCostsMore")} tone="gold" /> : null}
+            </View>
+            <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, lineHeight: 18 }]}>{t(subKey)}</Text>
+          </View>
+          <Ionicons
+            name={active ? "radio-button-on" : "ellipse-outline"}
+            size={22}
+            color={active ? colors.brand : colors.faint}
+          />
+        </View>
+        {/* the owner hasn't priced requests yet — a "₪0" would read as a bug */}
+        {fee > 0 ? (
+          <View style={{ ...ROW, gap: 8, paddingTop: 2 }}>
+            <Text style={{ color: colors.brand, fontSize: 15.5, fontWeight: "800" }}>{formatPrice(fee)}</Text>
+            <Text numberOfLines={1} style={[RTL_TEXT, { flex: 1, color: colors.muted, fontSize: 11.5 }]}>
+              {t("urgencyFeeNote")}
+            </Text>
+          </View>
+        ) : null}
+      </Pressable>
+    );
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -291,56 +363,28 @@ export default function CreateBooking() {
           contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xl, gap: spacing.xl }}
           keyboardShouldPersistTaps="handled"
         >
-          {/* who you're booking / open info banner */}
-          {proId ? (
-            pro ? (
-              <Card style={{ gap: 4 }}>
-                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12, fontWeight: "600" }]}>
-                  {t("bookingWith")}
-                </Text>
-                <View style={{ ...ROW, gap: 12 }}>
-                  <Avatar
-                    uri={pro.profile?.avatar_url}
-                    name={pro.business_name || pro.profile?.full_name}
-                    size={46}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 15.5, fontWeight: "800" }]}>
-                      {pro.business_name || pro.profile?.full_name || ""}
-                    </Text>
-                    <View style={{ ...ROW, gap: 6 }}>
-                      <StarRating rating={pro.rating_avg} size={13} />
-                      <Text style={{ color: colors.muted, fontSize: 12 }}>
-                        {pro.rating_avg.toFixed(1)} ({pro.rating_count})
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </Card>
-            ) : null
-          ) : (
-            <View
-              style={{
-                ...ROW,
-                gap: 10,
-                backgroundColor: colors.infoTint,
-                borderRadius: radius.md,
-                padding: spacing.md,
-                alignItems: "flex-start",
-              }}
-            >
-              <Ionicons name="information-circle" size={20} color={colors.info} />
-              <Text style={[RTL_TEXT, { color: colors.info, fontSize: 13, flex: 1, lineHeight: 19 }]}>
-                {t("openRequestInfo")}
-              </Text>
-            </View>
-          )}
+          {/* how this works */}
+          <View
+            style={{
+              ...ROW,
+              gap: 10,
+              backgroundColor: colors.infoTint,
+              borderRadius: radius.md,
+              padding: spacing.md,
+              alignItems: "flex-start",
+            }}
+          >
+            <Ionicons name="information-circle" size={20} color={colors.info} />
+            <Text style={[RTL_TEXT, { color: colors.info, fontSize: 13, flex: 1, lineHeight: 19 }]}>
+              {t("openRequestInfo")}
+            </Text>
+          </View>
 
           {/* category */}
           <View style={{ gap: spacing.md }}>
             <SectionHeader title={t("chooseCategory")} />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {[...shownCategories].reverse().map((c) => (
+              {[...categories].reverse().map((c) => (
                 <Chip
                   key={c.id}
                   label={loc(c, "name")}
@@ -381,6 +425,89 @@ export default function CreateBooking() {
               numberOfLines={4}
               style={{ minHeight: 100, textAlignVertical: "top" }}
             />
+          </View>
+
+          {/* urgency — the pricing decision, so it gets full-width cards */}
+          <View style={{ gap: spacing.md }}>
+            <SectionHeader title={t("urgencyTitle")} />
+            {urgencyCard("same_day", "flash", "urgencySameDay", "urgencySameDaySub")}
+            {urgencyCard("scheduled", "calendar-clock", "urgencyScheduled", "urgencyScheduledSub")}
+            {errors.urgency ? (
+              <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{errors.urgency}</Text>
+            ) : null}
+
+            {urgency === "scheduled" ? (
+              <View style={{ gap: spacing.md, marginTop: 2 }}>
+                <View style={{ ...ROW, gap: 6 }}>
+                  <Text style={[RTL_TEXT, { color: colors.text, fontSize: 13.5, fontWeight: "700" }]}>
+                    {t("scheduledFor")}
+                  </Text>
+                  <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 11.5 }]}>
+                    {t("urgencyPickTimeOptional")}
+                  </Text>
+                </View>
+
+                {/* date — opens the month grid (tomorrow onwards) */}
+                <Pressable
+                  onPress={() => setCalendarOpen(true)}
+                  style={{
+                    ...ROW,
+                    justifyContent: "space-between",
+                    backgroundColor: colors.card,
+                    borderWidth: 1.5,
+                    borderColor: colors.border,
+                    borderRadius: radius.md,
+                    paddingHorizontal: 14,
+                    paddingVertical: 13,
+                  }}
+                >
+                  <View style={{ ...ROW, gap: 8 }}>
+                    <Ionicons name="calendar-outline" size={17} color={colors.brand} />
+                    <Text style={{ color: pickedDate ? colors.text : colors.faint, fontSize: 15 }}>
+                      {pickedDate ? dateLabel(pickedDate) : t("chooseDate")}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-down" size={17} color={colors.faint} />
+                </Pressable>
+
+                {/* time — half-hour slots, RTL strip starting from the right */}
+                <View style={{ gap: 8 }}>
+                  <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, fontWeight: "700" }]}>
+                    {t("chooseHour")}
+                  </Text>
+                  <FlatList
+                    data={TIME_SLOTS}
+                    horizontal
+                    inverted
+                    keyExtractor={(s) => s}
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 8 }}
+                    renderItem={({ item }) => (
+                      <Chip
+                        label={item}
+                        active={pickedSlot === item}
+                        onPress={() => {
+                          setPickedSlot(item);
+                          setErrors((e) => ({ ...e, schedule: undefined }));
+                        }}
+                      />
+                    )}
+                  />
+                </View>
+
+                {pickedDate && pickedSlot ? (
+                  <View style={{ ...ROW, gap: 6 }}>
+                    <Ionicons name="checkmark-circle" size={15} color={colors.success} />
+                    <Text style={[RTL_TEXT, { color: colors.success, fontSize: 12.5, flex: 1 }]}>
+                      {t("scheduleSummary", { date: dateLabel(pickedDate), time: pickedSlot })}
+                    </Text>
+                  </View>
+                ) : null}
+                {errors.schedule ? (
+                  <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{errors.schedule}</Text>
+                ) : null}
+              </View>
+            ) : null}
           </View>
 
           {/* photos */}
@@ -501,106 +628,6 @@ export default function CreateBooking() {
             ) : null}
           </View>
 
-          {/* schedule */}
-          <View style={{ gap: spacing.md }}>
-            <SectionHeader title={t("scheduleLabel")} />
-            <View style={{ ...ROW, gap: 8 }}>
-              <Chip
-                label={t("asap")}
-                icon="flash"
-                active={scheduleMode === "asap"}
-                onPress={() => {
-                  setScheduleMode("asap");
-                  setErrors((e) => ({ ...e, schedule: undefined }));
-                }}
-              />
-              <Chip
-                label={t("pickTime")}
-                icon="calendar-clock"
-                active={scheduleMode === "pick"}
-                onPress={() => {
-                  setScheduleMode("pick");
-                  if (!pickedDate) setCalendarOpen(true);
-                }}
-              />
-            </View>
-            {scheduleMode === "pick" ? (
-              <View style={{ gap: spacing.md }}>
-                {/* date — opens the month grid */}
-                <Pressable
-                  onPress={() => setCalendarOpen(true)}
-                  style={{
-                    ...ROW,
-                    justifyContent: "space-between",
-                    backgroundColor: colors.card,
-                    borderWidth: 1.5,
-                    borderColor: colors.border,
-                    borderRadius: radius.md,
-                    paddingHorizontal: 14,
-                    paddingVertical: 13,
-                  }}
-                >
-                  <View style={{ ...ROW, gap: 8 }}>
-                    <Ionicons name="calendar-outline" size={17} color={colors.brand} />
-                    <Text style={{ color: pickedDate ? colors.text : colors.faint, fontSize: 15 }}>
-                      {pickedDate ? dateLabel(pickedDate) : t("chooseDate")}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-down" size={17} color={colors.faint} />
-                </Pressable>
-
-                {/* time — half-hour slots, RTL strip starting from the right */}
-                <View style={{ gap: 8 }}>
-                  <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, fontWeight: "700" }]}>
-                    {t("chooseHour")}
-                  </Text>
-                  <FlatList
-                    data={TIME_SLOTS}
-                    horizontal
-                    inverted
-                    keyExtractor={(s) => s}
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ gap: 8 }}
-                    renderItem={({ item }) => {
-                      const past =
-                        pickedDate !== null &&
-                        isToday(pickedDate) &&
-                        composeAt(pickedDate, item).getTime() <= now.getTime();
-                      return (
-                        <View style={{ opacity: past ? 0.35 : 1 }}>
-                          <Chip
-                            label={item}
-                            active={pickedSlot === item}
-                            onPress={
-                              past
-                                ? undefined
-                                : () => {
-                                    setPickedSlot(item);
-                                    setErrors((e) => ({ ...e, schedule: undefined }));
-                                  }
-                            }
-                          />
-                        </View>
-                      );
-                    }}
-                  />
-                </View>
-
-                {pickedDate && pickedSlot ? (
-                  <View style={{ ...ROW, gap: 6 }}>
-                    <Ionicons name="checkmark-circle" size={15} color={colors.success} />
-                    <Text style={[RTL_TEXT, { color: colors.success, fontSize: 12.5, flex: 1 }]}>
-                      {t("scheduleSummary", { date: dateLabel(pickedDate), time: pickedSlot })}
-                    </Text>
-                  </View>
-                ) : null}
-                {errors.schedule ? (
-                  <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{errors.schedule}</Text>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
-
           {/* completion meter — guidance for a request pros will actually answer */}
           <Card style={{ gap: 10 }}>
             <View style={{ ...ROW, gap: 12 }}>
@@ -641,7 +668,6 @@ export default function CreateBooking() {
               ))}
             </View>
           </Card>
-
         </ScrollView>
 
         {/* sticky submit — always visible below the form */}
@@ -670,18 +696,16 @@ export default function CreateBooking() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* date picker */}
+      {/* date picker — scheduled requests start tomorrow */}
       <CalendarModal
         visible={calendarOpen}
         value={pickedDate}
         title={t("chooseDate")}
-        minDate={todayStart}
+        minDate={tomorrowStart}
         onClose={() => setCalendarOpen(false)}
         onSelect={(d) => {
           setPickedDate(d);
           setCalendarOpen(false);
-          // moving back to today can push the chosen slot into the past
-          if (pickedSlot && isToday(d) && composeAt(d, pickedSlot).getTime() <= Date.now()) setPickedSlot(null);
           setErrors((e) => ({ ...e, schedule: undefined }));
         }}
       />
