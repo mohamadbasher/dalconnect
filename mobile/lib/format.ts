@@ -94,6 +94,23 @@ export function isValidIsraeliPhone(p: string): boolean {
 }
 
 /**
+ * The provider's six-digit login number as it should appear WHILE typing.
+ *
+ * An Israeli mobile is exactly 10 digits (05X XXXXXXX), so the number is
+ * positions 5-10 — it starts filling the moment the 5th digit is entered and
+ * is complete at the 10th. Any country code (+972 / 00972) is folded away
+ * first, so it never counts toward those positions.
+ *
+ *   05          -> ""
+ *   05246       -> "6"
+ *   0524604602  -> "604602"
+ *   +972524604602 -> "604602"
+ */
+export function providerNoPreview(phone: string): string {
+  return canonicalIsraeliPhone(phone).slice(4, 10);
+}
+
+/**
  * Why a number was rejected, so the field can say something more useful than
  * "invalid". Returns null when the number is fine.
  */

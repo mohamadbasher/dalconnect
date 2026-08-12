@@ -23,7 +23,7 @@ import {
   FormError,
 } from "../../components/auth-ui";
 import { useAuth } from "../../context/AuthContext";
-import { canonicalIsraeliPhone, phoneProblem, sanitizePhoneInput } from "../../lib/format";
+import { canonicalIsraeliPhone, phoneProblem, providerNoPreview, sanitizePhoneInput } from "../../lib/format";
 import type { PhoneProblem } from "../../lib/format";
 
 const MIN_PASSWORD = 6;
@@ -63,11 +63,8 @@ export default function RegisterProvider() {
   const [submitted, setSubmitted] = useState(false);
   const [issuedNo, setIssuedNo] = useState<string | null>(null);
 
-  // Live preview of the login number: the last six digits of what they typed.
-  const previewNo = useMemo(() => {
-    const d = canonicalIsraeliPhone(phone);
-    return d.length >= 6 ? d.slice(-6) : "";
-  }, [phone]);
+  // Fills in as they type: digits 5-10 of the phone, country code ignored.
+  const previewNo = useMemo(() => providerNoPreview(phone), [phone]);
 
   const computeErrors = (): FieldErrors => {
     const e: FieldErrors = {};
