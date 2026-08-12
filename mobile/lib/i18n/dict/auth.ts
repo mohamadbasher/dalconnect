@@ -23,6 +23,13 @@ export const auth: Dict = {
   // Welcome's door into the combined sign-in/register screen — deliberately
   // neutral, since that screen opens on either tab.
   authGetStarted: { ar: "يلا نبدأ", he: "בואו נתחיל" },
+  // greeting is split from its subtitle so the heading can stand on its own
+  authWelcomeBack: { ar: "أهلاً بك!", he: "ברוכים הבאים!" },
+  authWelcomeBackSub: { ar: "سجّل دخولك للمتابعة", he: "התחברו כדי להמשיך" },
+  authWelcomeNew: { ar: "أنشئ حسابك", he: "יצירת חשבון" },
+  authWelcomeNewSub: { ar: "دقيقة وحدة وبتصير جاهز", he: "דקה אחת ואתם בפנים" },
+  authOr: { ar: "أو", he: "או" },
+  authForgotLink: { ar: "نسيت كلمة المرور؟", he: "שכחת סיסמה?" },
   authHaveAccount: { ar: "لديّ حساب بالفعل", he: "כבר יש לי חשבון" },
 
   // sign in

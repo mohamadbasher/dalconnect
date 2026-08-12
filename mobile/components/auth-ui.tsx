@@ -38,10 +38,12 @@ const HERO_GLASS_EDGE = "rgba(255,255,255,0.35)";
  * long forms need — the sheet insets itself for the keyboard and the last
  * control can always be scrolled clear of it.
  */
-export function AuthScreen({ children }: { children: React.ReactNode }) {
+export function AuthScreen({ children, light }: { children: React.ReactNode; light?: boolean }) {
   const { colors } = useTheme();
   return (
-    <View style={{ flex: 1, backgroundColor: colors.brand }}>
+    // `light` screens open on the peach header, so the over-scroll behind it
+    // must match that instead of the brand block used by the gradient heroes.
+    <View style={{ flex: 1, backgroundColor: light ? "#fdeadb" : colors.brand }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
           contentContainerStyle={{ flexGrow: 1 }}
@@ -195,7 +197,7 @@ export function AuthTabs<K extends string>({
   onChange,
 }: {
   value: K;
-  options: { key: K; label: string }[];
+  options: { key: K; label: string; icon?: keyof typeof Ionicons.glyphMap }[];
   onChange: (key: K) => void;
 }) {
   const { colors, shadows } = useTheme();
@@ -203,11 +205,12 @@ export function AuthTabs<K extends string>({
     <View
       style={{
         flexDirection: "row-reverse",
-        backgroundColor: colors.bg,
+        backgroundColor: colors.card,
         borderRadius: radius.full,
         padding: 5,
         borderWidth: 1,
         borderColor: colors.border,
+        ...shadows.card,
       }}
     >
       {options.map((o) => {
@@ -217,10 +220,20 @@ export function AuthTabs<K extends string>({
             key={o.key}
             onPress={() => (on ? undefined : onChange(o.key))}
             style={[
-              { flex: 1, paddingVertical: 13, borderRadius: radius.full, alignItems: "center" },
+              {
+                flex: 1,
+                ...ROW,
+                justifyContent: "center",
+                gap: 7,
+                paddingVertical: 13,
+                borderRadius: radius.full,
+              },
               on ? { backgroundColor: colors.brand, ...shadows.cta } : null,
             ]}
           >
+            {o.icon ? (
+              <Ionicons name={o.icon} size={17} color={on ? colors.onBrand : colors.muted} />
+            ) : null}
             <Text
               style={{
                 fontSize: 15,
@@ -375,31 +388,34 @@ export function AuthCta({
       onPress={onPress}
       disabled={off}
       style={({ pressed }) => [
-        {
-          flexDirection: "row-reverse",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 8,
-          backgroundColor: colors.brand,
-          borderRadius: 16,
-          paddingVertical: 17,
-          marginTop: 2,
-          opacity: off ? 0.6 : 1,
-        },
+        { borderRadius: 16, marginTop: 2, opacity: off ? 0.6 : 1 },
         shadows.cta,
         off ? { shadowOpacity: 0, elevation: 0 } : null,
         pressed && !off ? { opacity: 0.9, transform: [{ scale: 0.99 }] } : null,
       ]}
     >
-      {loading ? (
-        <ActivityIndicator color={colors.onBrand} />
-      ) : (
-        <>
-          <Text style={{ color: colors.onBrand, fontSize: 16, fontWeight: "800" }}>{title}</Text>
-          {/* RTL: forward is leftward */}
-          <Ionicons name="arrow-back" size={18} color={colors.onBrand} />
-        </>
-      )}
+      {/* the gradient gives the button the same depth as the brand mark */}
+      <LinearGradient
+        {...brandGradientProps}
+        style={{
+          flexDirection: "row-reverse",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          borderRadius: 16,
+          paddingVertical: 17,
+        }}
+      >
+        {loading ? (
+          <ActivityIndicator color={colors.onBrand} />
+        ) : (
+          <>
+            <Text style={{ color: colors.onBrand, fontSize: 16, fontWeight: "800" }}>{title}</Text>
+            {/* RTL: forward is leftward */}
+            <Ionicons name="arrow-back" size={18} color={colors.onBrand} />
+          </>
+        )}
+      </LinearGradient>
     </Pressable>
   );
 }
@@ -458,6 +474,208 @@ export function AuthFooter({
         {icon ? <Ionicons name={icon} size={19} color={colors.brand} /> : null}
         <Text style={{ color: colors.brand, fontWeight: "800", fontSize: 15 }}>{action}</Text>
       </Pressable>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Light auth style — a warm, welcoming header instead of the dark gradient.
+// ---------------------------------------------------------------------------
+
+/**
+ * Soft peach-to-white header with the brand mark.
+ *
+ * The reference design sits on a blurred room photo; there is no such asset in
+ * the project, so the warmth comes from a gradient instead — same feel, nothing
+ * to ship.
+ */
+export function AuthHeaderLight({ tagline }: { tagline?: string }) {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  return (
+    <LinearGradient
+      colors={["#fdeadb", "#fdf4ee", "#ffffff"]}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 1 }}
+      style={{ paddingTop: insets.top + 28, paddingBottom: 26, alignItems: "center" }}
+    >
+      <StatusBar style="dark" />
+
+      {/* brand tile with its own coloured glow */}
+      <LinearGradient
+        {...brandGradientProps}
+        style={{
+          width: 92,
+          height: 92,
+          borderRadius: 26,
+          alignItems: "center",
+          justifyContent: "center",
+          shadowColor: colors.brand,
+          shadowOpacity: 0.4,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: 8,
+        }}
+      >
+        <MaterialCommunityIcons name="hammer-wrench" size={44} color="#ffffff" />
+      </LinearGradient>
+
+      {/* two-tone wordmark — always Latin, in both languages */}
+      <Text
+        style={{
+          marginTop: 14,
+          fontSize: 30,
+          fontWeight: "800",
+          writingDirection: "ltr",
+          letterSpacing: 0.2,
+          color: colors.text,
+        }}
+      >
+        Dal<Text style={{ color: colors.brand }}>Connect</Text>
+      </Text>
+
+      {tagline ? (
+        <View style={{ ...ROW, gap: 10, marginTop: 8, paddingHorizontal: 32, alignSelf: "stretch" }}>
+          <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+          <Text style={{ color: colors.muted, fontSize: 12.5 }}>{tagline}</Text>
+          <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+        </View>
+      ) : null}
+    </LinearGradient>
+  );
+}
+
+/** Big greeting + subtitle + a short brand rule under it. */
+export function AuthGreeting({ title, subtitle }: { title: string; subtitle?: string }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ alignItems: "center", gap: 6 }}>
+      <Text style={{ color: colors.text, fontSize: 26, fontWeight: "800", textAlign: "center" }}>{title}</Text>
+      {subtitle ? (
+        <Text style={{ color: colors.muted, fontSize: 14, textAlign: "center" }}>{subtitle}</Text>
+      ) : null}
+      <View
+        style={{
+          width: 46,
+          height: 3,
+          borderRadius: radius.full,
+          backgroundColor: colors.brand,
+          marginTop: 6,
+        }}
+      />
+    </View>
+  );
+}
+
+/**
+ * Input presented as a card: the label sits inside, above the value, with the
+ * icon held apart on the far side by a hairline.
+ */
+export function FieldCard({
+  label,
+  icon,
+  error,
+  hint,
+  trailing,
+  inputStyle,
+  ...props
+}: TextInputProps & {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  error?: string;
+  hint?: string;
+  trailing?: React.ReactNode;
+  inputStyle?: StyleProp<TextStyle>;
+}) {
+  const { colors, shadows } = useTheme();
+  return (
+    <View style={{ gap: 6 }}>
+      <View
+        style={{
+          ...ROW,
+          gap: 12,
+          backgroundColor: colors.card,
+          borderRadius: 16,
+          borderWidth: 1,
+          borderColor: error ? colors.danger : colors.border,
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          ...shadows.card,
+        }}
+      >
+        {/* label + value stack (right side in RTL) */}
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12 }]}>{label}</Text>
+          <View style={{ ...ROW, gap: 8 }}>
+            <TextInput
+              placeholderTextColor={colors.faint}
+              {...props}
+              style={[
+                RTL_TEXT,
+                { flex: 1, fontSize: 15.5, color: colors.text, padding: 0, minHeight: 22 },
+                inputStyle,
+              ]}
+            />
+            {trailing}
+          </View>
+        </View>
+
+        <View style={{ width: 1, alignSelf: "stretch", backgroundColor: colors.hairline }} />
+        <Ionicons name={icon} size={21} color={error ? colors.danger : colors.faint} />
+      </View>
+
+      {error ? (
+        <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{error}</Text>
+      ) : hint ? (
+        <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 11.5, lineHeight: 17 }]}>{hint}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** FieldCard with the show/hide eye. */
+export function PasswordCard({
+  label,
+  error,
+  hint,
+  inputStyle,
+  ...props
+}: TextInputProps & {
+  label: string;
+  error?: string;
+  hint?: string;
+  inputStyle?: StyleProp<TextStyle>;
+}) {
+  const { colors } = useTheme();
+  const [visible, setVisible] = useState(false);
+  return (
+    <FieldCard
+      label={label}
+      icon="lock-closed-outline"
+      error={error}
+      hint={hint}
+      inputStyle={inputStyle}
+      secureTextEntry={!visible}
+      autoCapitalize="none"
+      autoComplete="off"
+      trailing={
+        <Pressable onPress={() => setVisible((v) => !v)} hitSlop={10}>
+          <Ionicons name={visible ? "eye-off-outline" : "eye-outline"} size={20} color={colors.faint} />
+        </Pressable>
+      }
+      {...props}
+    />
+  );
+}
+
+/** "or" rule between the primary action and the alternative one. */
+export function OrDivider({ label }: { label: string }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ ...ROW, gap: 12, marginTop: spacing.lg }}>
+      <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+      <Text style={{ color: colors.muted, fontSize: 13 }}>{label}</Text>
+      <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
     </View>
   );
 }

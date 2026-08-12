@@ -16,14 +16,15 @@ import { useTheme, radius, spacing } from "../lib/theme";
 import { ROW, RTL_TEXT } from "../lib/rtl";
 import {
   AuthScreen,
-  AuthHero,
-  AuthSheet,
+  AuthHeaderLight,
+  AuthGreeting,
   AuthTabs,
   AuthCta,
   AuthFooter,
-  IconInput,
-  PasswordField,
+  FieldCard,
+  PasswordCard,
   FormError,
+  OrDivider,
 } from "./auth-ui";
 import { useAuth } from "../context/AuthContext";
 import { canonicalIsraeliPhone, isValidIsraeliPhone, phoneProblem, sanitizePhoneInput } from "../lib/format";
@@ -79,6 +80,12 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
 
   // shared by both forms
   const [password, setPassword] = useState("");
+
+  // Password resets go through support in v1 — the same target the WhatsApp
+  // block below uses, so "forgot password?" and it can never drift apart.
+  const openSupport = () => {
+    Linking.openURL(SUPPORT_WHATSAPP_URL).catch(() => {});
+  };
 
   const switchMode = (next: Mode) => {
     if (next === mode) return;
@@ -167,21 +174,20 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
   const signingIn = mode === "signIn";
 
   return (
-    <AuthScreen>
-      <AuthHero
-        // the brand stays Latin in both languages, like the welcome screen
-        title="DalConnect"
-        ltrTitle
-        tagline={signingIn ? t("authSignInSubtitle") : t("authSignUpSubtitle")}
-        onBack={router.canGoBack() ? () => router.back() : undefined}
-      />
+    <AuthScreen light>
+      <AuthHeaderLight tagline={t("authWelcomeNewSub")} />
 
-      <AuthSheet>
+      <View style={{ paddingHorizontal: 24, paddingBottom: 28, gap: spacing.xl }}>
+        <AuthGreeting
+          title={signingIn ? t("authWelcomeBack") : t("authWelcomeNew")}
+          subtitle={signingIn ? t("authWelcomeBackSub") : t("authWelcomeNewSub")}
+        />
+
         <AuthTabs
           value={mode}
           options={[
-            { key: "signIn" as Mode, label: t("authSignInTitle") },
-            { key: "signUp" as Mode, label: t("authCreateAccount") },
+            { key: "signIn" as Mode, label: t("authSignInTitle"), icon: "person-outline" },
+            { key: "signUp" as Mode, label: t("authCreateAccount"), icon: "person-add-outline" },
           ]}
           onChange={switchMode}
         />
@@ -205,10 +211,10 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
           </View>
         ) : null}
 
-        <View style={{ marginTop: spacing.xl, gap: 14 }}>
+        <View style={{ gap: 14 }}>
           {signingIn ? (
             <>
-              <IconInput
+              <FieldCard
                 label={t("authPhone")}
                 icon="call-outline"
                 value={identifier}
@@ -223,21 +229,36 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
                 autoCorrect={false}
                 inputStyle={{ textAlign: "right", writingDirection: "ltr" }}
               />
-              <PasswordField
+              <PasswordCard
                 label={t("authPassword")}
                 value={password}
                 onChangeText={setPassword}
                 error={inErrors.password}
               />
-              <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12, marginTop: -6 }]}>
-                {t("authSignInHint")}
-              </Text>
+              {/* forgot password sits opposite the hint, as in the design */}
+              <View style={{ ...ROW, justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={[RTL_TEXT, { flex: 1, color: colors.faint, fontSize: 12 }]}>
+                  {t("authSignInHint")}
+                </Text>
+                <Pressable onPress={openSupport} hitSlop={8}>
+                  <Text
+                    style={{
+                      color: colors.brand,
+                      fontSize: 12.5,
+                      fontWeight: "700",
+                      textDecorationLine: "underline",
+                    }}
+                  >
+                    {t("authForgotLink")}
+                  </Text>
+                </Pressable>
+              </View>
               <FormError message={formError} />
               <AuthCta title={t("authSignInTitle")} onPress={submitSignIn} loading={loading} />
             </>
           ) : (
             <>
-              <IconInput
+              <FieldCard
                 label={t("authFullName")}
                 icon="person-outline"
                 value={fullName}
@@ -246,7 +267,7 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
                 placeholder={t("authFullNamePh")}
                 autoCapitalize="words"
               />
-              <IconInput
+              <FieldCard
                 label={t("authPhone")}
                 icon="call-outline"
                 value={phone}
@@ -260,14 +281,14 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
                 maxLength={14}
                 inputStyle={{ textAlign: "right", writingDirection: "ltr" }}
               />
-              <PasswordField
+              <PasswordCard
                 label={t("authPassword")}
                 value={password}
                 onChangeText={setPassword}
                 error={liveUpErrors.password}
                 placeholder={t("authPasswordPh")}
               />
-              <PasswordField
+              <PasswordCard
                 label={t("authConfirmPassword")}
                 value={confirm}
                 onChangeText={setConfirm}
@@ -324,6 +345,8 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
           )}
         </View>
 
+        <OrDivider label={t("authOr")} />
+
         {/* providers sign in on their own track — the button says it all */}
         <AuthFooter
           action={t("provSignInEntry")}
@@ -331,14 +354,14 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
           onPress={() => router.push("/(auth)/sign-in-provider")}
         />
 
-        {/* forgot password → support (sign-in only) */}
+        {/* forgot password → support (sign-in only) — unchanged */}
         {signingIn ? (
           <View style={{ alignItems: "center", gap: spacing.sm, marginTop: spacing.xl }}>
             <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, textAlign: "center" }]}>
               {t("authForgotNote")}
             </Text>
             <Pressable
-              onPress={() => Linking.openURL(SUPPORT_WHATSAPP_URL).catch(() => {})}
+              onPress={openSupport}
               style={({ pressed }) => ({
                 ...ROW,
                 gap: 6,
@@ -356,7 +379,7 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
             </Pressable>
           </View>
         ) : null}
-      </AuthSheet>
+      </View>
     </AuthScreen>
   );
 }
