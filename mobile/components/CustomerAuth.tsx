@@ -169,7 +169,9 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
   return (
     <AuthScreen>
       <AuthHero
-        title={t("appName")}
+        // the brand stays Latin in both languages, like the welcome screen
+        title="DalConnect"
+        ltrTitle
         tagline={signingIn ? t("authSignInSubtitle") : t("authSignUpSubtitle")}
         onBack={router.canGoBack() ? () => router.back() : undefined}
       />

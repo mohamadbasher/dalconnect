@@ -67,11 +67,14 @@ export function AuthHero({
   tagline,
   icon = "hammer-wrench",
   onBack,
+  ltrTitle,
 }: {
   title: string;
   tagline?: string;
   icon?: keyof typeof MaterialCommunityIcons.glyphMap;
   onBack?: () => void;
+  /** Set for the Latin brand name so it never picks up RTL ordering. */
+  ltrTitle?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   return (
@@ -121,11 +124,12 @@ export function AuthHero({
       <Text
         style={{
           color: HERO_INK,
-          fontSize: 21,
+          fontSize: ltrTitle ? 26 : 21,
           fontWeight: "800",
           marginTop: 12,
           textAlign: "center",
           paddingHorizontal: 30,
+          ...(ltrTitle ? { writingDirection: "ltr" as const, letterSpacing: 0.3 } : null),
         }}
       >
         {title}
