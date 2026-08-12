@@ -322,9 +322,8 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
           )}
         </View>
 
-        {/* providers sign in on their own track */}
+        {/* providers sign in on their own track — the button says it all */}
         <AuthFooter
-          hint={t("provSignInEntryHint")}
           action={t("provSignInEntry")}
           icon="construct-outline"
           onPress={() => router.push("/(auth)/sign-in-provider")}

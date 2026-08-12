@@ -420,7 +420,8 @@ export function AuthFooter({
   icon,
   onPress,
 }: {
-  hint: string;
+  /** Optional — omit when the button alone says enough. */
+  hint?: string;
   action: string;
   icon?: keyof typeof Ionicons.glyphMap;
   onPress: () => void;
@@ -429,9 +430,11 @@ export function AuthFooter({
   return (
     <View style={{ marginTop: spacing.lg, gap: 10 }}>
       <View style={{ height: 1, backgroundColor: colors.border }} />
-      <Text style={{ color: colors.muted, fontSize: 12.5, textAlign: "center", lineHeight: 19, marginTop: 6 }}>
-        {hint}
-      </Text>
+      {hint ? (
+        <Text style={{ color: colors.muted, fontSize: 12.5, textAlign: "center", lineHeight: 19, marginTop: 6 }}>
+          {hint}
+        </Text>
+      ) : null}
       <Pressable
         onPress={onPress}
         style={({ pressed }) => [
