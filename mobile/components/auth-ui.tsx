@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useTheme, radius, spacing, brandGradientProps } from "../lib/theme";
+import { useTheme, radius, spacing, brandGradientProps, brandGradientBrightProps } from "../lib/theme";
 import { ROW, RTL_TEXT } from "../lib/rtl";
 
 /** White-on-brand ink for the hero (see file header). */
@@ -41,9 +41,9 @@ const HERO_GLASS_EDGE = "rgba(255,255,255,0.35)";
 export function AuthScreen({ children, light }: { children: React.ReactNode; light?: boolean }) {
   const { colors } = useTheme();
   return (
-    // `light` screens open on the peach header, so the over-scroll behind it
-    // must match that instead of the brand block used by the gradient heroes.
-    <View style={{ flex: 1, backgroundColor: light ? "#fdeadb" : colors.brand }}>
+    // A `light` screen is white behind the form — the warmth belongs to the
+    // header alone. Tinting the whole screen is what made this look washed out.
+    <View style={{ flex: 1, backgroundColor: light ? colors.card : colors.brand }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
           contentContainerStyle={{ flexGrow: 1 }}
@@ -388,7 +388,7 @@ export function AuthCta({
       onPress={onPress}
       disabled={off}
       style={({ pressed }) => [
-        { borderRadius: 16, marginTop: 2, opacity: off ? 0.6 : 1 },
+        { borderRadius: 18, marginTop: 4, opacity: off ? 0.6 : 1 },
         shadows.cta,
         off ? { shadowOpacity: 0, elevation: 0 } : null,
         pressed && !off ? { opacity: 0.9, transform: [{ scale: 0.99 }] } : null,
@@ -396,14 +396,14 @@ export function AuthCta({
     >
       {/* the gradient gives the button the same depth as the brand mark */}
       <LinearGradient
-        {...brandGradientProps}
+        {...brandGradientBrightProps}
         style={{
           flexDirection: "row-reverse",
           alignItems: "center",
           justifyContent: "center",
           gap: 8,
-          borderRadius: 16,
-          paddingVertical: 17,
+          borderRadius: 18,
+          paddingVertical: 18,
         }}
       >
         {loading ? (
@@ -494,40 +494,92 @@ export function AuthHeaderLight({ tagline }: { tagline?: string }) {
   const insets = useSafeAreaInsets();
   return (
     <LinearGradient
-      colors={["#fdeadb", "#fdf4ee", "#ffffff"]}
+      // warm at the top, resolving to the card colour so the form below reads
+      // as one continuous surface rather than a peach panel
+      colors={["#fbe3d1", "#fdf0e6", "#fffaf6", colors.card]}
+      locations={[0, 0.45, 0.78, 1]}
       start={{ x: 0.5, y: 0 }}
       end={{ x: 0.5, y: 1 }}
-      style={{ paddingTop: insets.top + 28, paddingBottom: 26, alignItems: "center" }}
+      style={{ paddingTop: insets.top + 30, paddingBottom: 30, alignItems: "center", overflow: "hidden" }}
     >
       <StatusBar style="dark" />
 
-      {/* brand tile with its own coloured glow */}
-      <LinearGradient
-        {...brandGradientProps}
+      {/* Soft light blooms. The reference sits on a photo of a warm room; these
+          stand in for that glow so the header has depth instead of a flat wash. */}
+      <View
+        pointerEvents="none"
         style={{
-          width: 92,
-          height: 92,
-          borderRadius: 26,
-          alignItems: "center",
-          justifyContent: "center",
-          shadowColor: colors.brand,
-          shadowOpacity: 0.4,
-          shadowRadius: 18,
-          shadowOffset: { width: 0, height: 8 },
-          elevation: 8,
+          position: "absolute",
+          top: -70,
+          right: -50,
+          width: 230,
+          height: 230,
+          borderRadius: 115,
+          backgroundColor: "rgba(255,255,255,0.55)",
         }}
-      >
-        <MaterialCommunityIcons name="hammer-wrench" size={44} color="#ffffff" />
-      </LinearGradient>
+      />
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          top: 10,
+          left: -80,
+          width: 210,
+          height: 210,
+          borderRadius: 105,
+          backgroundColor: "rgba(255,196,144,0.30)",
+        }}
+      />
+
+      {/* halo behind the mark, so the tile sits in light rather than on top of it */}
+      <View style={{ alignItems: "center", justifyContent: "center" }}>
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            width: 148,
+            height: 148,
+            borderRadius: 74,
+            backgroundColor: "rgba(226,130,68,0.14)",
+          }}
+        />
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            width: 116,
+            height: 116,
+            borderRadius: 58,
+            backgroundColor: "rgba(226,130,68,0.16)",
+          }}
+        />
+        <LinearGradient
+          {...brandGradientBrightProps}
+          style={{
+            width: 94,
+            height: 94,
+            borderRadius: 28,
+            alignItems: "center",
+            justifyContent: "center",
+            shadowColor: colors.brand,
+            shadowOpacity: 0.45,
+            shadowRadius: 22,
+            shadowOffset: { width: 0, height: 12 },
+            elevation: 12,
+          }}
+        >
+          <MaterialCommunityIcons name="hammer-wrench" size={44} color="#ffffff" />
+        </LinearGradient>
+      </View>
 
       {/* two-tone wordmark — always Latin, in both languages */}
       <Text
         style={{
-          marginTop: 14,
-          fontSize: 30,
+          marginTop: 18,
+          fontSize: 33,
           fontWeight: "800",
           writingDirection: "ltr",
-          letterSpacing: 0.2,
+          letterSpacing: -0.2,
           color: colors.text,
         }}
       >
@@ -535,10 +587,10 @@ export function AuthHeaderLight({ tagline }: { tagline?: string }) {
       </Text>
 
       {tagline ? (
-        <View style={{ ...ROW, gap: 10, marginTop: 8, paddingHorizontal: 32, alignSelf: "stretch" }}>
-          <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-          <Text style={{ color: colors.muted, fontSize: 12.5 }}>{tagline}</Text>
-          <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+        <View style={{ ...ROW, gap: 12, marginTop: 10, paddingHorizontal: 40, alignSelf: "stretch" }}>
+          <View style={{ flex: 1, height: 1, backgroundColor: "rgba(28,25,23,0.10)" }} />
+          <Text style={{ color: colors.muted, fontSize: 13 }}>{tagline}</Text>
+          <View style={{ flex: 1, height: 1, backgroundColor: "rgba(28,25,23,0.10)" }} />
         </View>
       ) : null}
     </LinearGradient>
@@ -593,26 +645,27 @@ export function FieldCard({
       <View
         style={{
           ...ROW,
-          gap: 12,
+          gap: 14,
+          alignItems: "center",
           backgroundColor: colors.card,
-          borderRadius: 16,
+          borderRadius: 18,
           borderWidth: 1,
           borderColor: error ? colors.danger : colors.border,
           paddingHorizontal: 16,
-          paddingVertical: 12,
+          paddingVertical: 13,
           ...shadows.card,
         }}
       >
         {/* label + value stack (right side in RTL) */}
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12 }]}>{label}</Text>
-          <View style={{ ...ROW, gap: 8 }}>
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5 }]}>{label}</Text>
+          <View style={{ ...ROW, gap: 10, alignItems: "center" }}>
             <TextInput
               placeholderTextColor={colors.faint}
               {...props}
               style={[
                 RTL_TEXT,
-                { flex: 1, fontSize: 15.5, color: colors.text, padding: 0, minHeight: 22 },
+                { flex: 1, fontSize: 16, color: colors.text, padding: 0, minHeight: 24 },
                 inputStyle,
               ]}
             />
@@ -620,8 +673,9 @@ export function FieldCard({
           </View>
         </View>
 
-        <View style={{ width: 1, alignSelf: "stretch", backgroundColor: colors.hairline }} />
-        <Ionicons name={icon} size={21} color={error ? colors.danger : colors.faint} />
+        {/* short rule, not a full-height wall — it only has to separate */}
+        <View style={{ width: 1, height: 30, backgroundColor: colors.hairline }} />
+        <Ionicons name={icon} size={22} color={error ? colors.danger : colors.faint} />
       </View>
 
       {error ? (

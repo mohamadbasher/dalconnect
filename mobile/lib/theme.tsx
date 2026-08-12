@@ -70,6 +70,18 @@ export const radius = { sm: 8, md: 12, lg: 18, tile: 19, xl: 24, full: 999 } as 
 export const brandGradient = ["#e0813f", "#c25d27", "#9c4a1f"] as const;
 export const brandGradientStart = { x: 0.1, y: 0 } as const;
 export const brandGradientEnd = { x: 0.9, y: 1 } as const;
+/**
+ * Two-stop version for small, bright surfaces — the app tile and CTAs.
+ * `brandGradient`'s third stop (#9c4a1f) is deep enough to read as brown on a
+ * 90px square, which makes the mark look muddy rather than warm.
+ */
+export const brandGradientBright = ["#e58244", "#c25d27"] as const;
+export const brandGradientBrightProps = {
+  colors: brandGradientBright,
+  start: { x: 0.15, y: 0 } as const,
+  end: { x: 0.85, y: 1 } as const,
+};
+
 /** Spread onto <LinearGradient {...brandGradientProps} /> for the canonical brand fill. */
 export const brandGradientProps = {
   colors: brandGradient,

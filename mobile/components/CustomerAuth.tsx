@@ -177,7 +177,17 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
     <AuthScreen light>
       <AuthHeaderLight tagline={t("authWelcomeNewSub")} />
 
-      <View style={{ paddingHorizontal: 24, paddingBottom: 28, gap: spacing.xl }}>
+      {/* the header already fades into this surface, so no seam is needed */}
+      <View
+        style={{
+          flexGrow: 1,
+          backgroundColor: colors.card,
+          paddingHorizontal: 22,
+          paddingTop: 4,
+          paddingBottom: 32,
+          gap: 22,
+        }}
+      >
         <AuthGreeting
           title={signingIn ? t("authWelcomeBack") : t("authWelcomeNew")}
           subtitle={signingIn ? t("authWelcomeBackSub") : t("authWelcomeNewSub")}
