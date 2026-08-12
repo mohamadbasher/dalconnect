@@ -20,6 +20,9 @@ export const auth: Dict = {
     he: "עקבו אחרי העבודה שלב אחרי שלב עד הסיום",
   },
   authCreateAccount: { ar: "إنشاء حساب", he: "יצירת חשבון" },
+  // Welcome's door into the combined sign-in/register screen — deliberately
+  // neutral, since that screen opens on either tab.
+  authGetStarted: { ar: "يلا نبدأ", he: "בואו נתחיל" },
   authHaveAccount: { ar: "لديّ حساب بالفعل", he: "כבר יש לי חשבון" },
 
   // sign in

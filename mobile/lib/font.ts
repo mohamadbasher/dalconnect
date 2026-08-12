@@ -43,24 +43,58 @@ function fontFor(weight: string | undefined): string {
   return map[weight ?? "400"] ?? map["400"]!;
 }
 
+// Neither brand face covers both scripts: Cairo has Arabic + Latin but no
+// Hebrew, Rubik has Hebrew + Latin but no Arabic. The app mixes them freely —
+// an Arabic professional's name is shown to a Hebrew customer, and either user
+// may type either script — so text in the "wrong" script must fall back to the
+// system font instead of rendering as blanks or tofu.
+const ARABIC = /[؀-ۿݐ-ݿﭐ-﷿ﹰ-﻿]/;
+const HEBREW = /[֐-׿יִ-ﭏ]/;
+
+/** True when the chosen brand face cannot draw this string. */
+function scriptMismatch(value: string): boolean {
+  return currentLang === "he" ? ARABIC.test(value) : HEBREW.test(value);
+}
+
+/** Concatenate a node's plain-string children; anything else is ignored. */
+function stringOf(children: unknown): string {
+  if (typeof children === "string") return children;
+  if (typeof children === "number") return String(children);
+  if (Array.isArray(children)) return children.map(stringOf).join("");
+  return "";
+}
+
 let applied = false;
 export function applyGlobalFont(): void {
   if (applied) return;
   applied = true;
-  for (const Comp of [Text, TextInput] as any[]) {
-    const origRender = Comp.render;
-    if (!origRender) continue; // RN internals changed — fail safe, keep system font
-    Comp.render = function (...args: any[]) {
-      const el = origRender.apply(this, args);
+
+  // --- Text: brand font, unless the content is in the other script ---
+  const TextAny = Text as any;
+  const origTextRender = TextAny.render;
+  if (origTextRender) {
+    TextAny.render = function (...args: any[]) {
+      const el = origTextRender.apply(this, args);
       if (!el) return el;
       const flat = (StyleSheet.flatten(el.props.style) || {}) as TextStyle;
       // Respect an explicit fontFamily (icon fonts set their own cut).
-      const fontFamily = flat.fontFamily ?? fontFor(flat.fontWeight ? String(flat.fontWeight) : undefined);
+      if (flat.fontFamily) return el;
+      if (scriptMismatch(stringOf(el.props.children))) {
+        // Let the platform pick a face that can actually draw it.
+        return React.cloneElement(el, { style: [el.props.style, { fontWeight: flat.fontWeight }] });
+      }
       // fontWeight MUST be dropped once a named cut is chosen: combining the two
       // makes Android synthesise a second bold on top of an already-bold face.
-      // Setting it to undefined in the last style layer deletes it on flatten.
-      const patch: TextStyle = { fontFamily, fontWeight: undefined };
+      const patch: TextStyle = {
+        fontFamily: fontFor(flat.fontWeight ? String(flat.fontWeight) : undefined),
+        fontWeight: undefined,
+      };
       return React.cloneElement(el, { style: [el.props.style, patch] });
     };
   }
+
+  // --- TextInput: never force a brand face ---
+  // What someone types is their business: an Arabic name in the Hebrew UI (or
+  // vice versa) rendered blank, which reads as "the field won't accept input".
+  // The system font covers both scripts, so input is always visible.
 }

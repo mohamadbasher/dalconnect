@@ -152,15 +152,18 @@ export default function Welcome() {
           </View>
         ) : null}
 
-        {/* CTAs */}
+        {/* CTAs — sign-in and register are one screen with tabs now, so this is
+            simply the door into it; the second link just opens the other tab. */}
         <View style={{ gap: spacing.sm }}>
           <Pressable
             onPress={() => router.push("/(auth)/sign-up")}
             style={({ pressed }) => ({
+              ...ROW,
+              justifyContent: "center",
+              gap: 8,
               backgroundColor: WHITE,
               borderRadius: radius.md,
               paddingVertical: 15,
-              alignItems: "center",
               opacity: pressed ? 0.9 : 1,
               transform: [{ scale: pressed ? 0.98 : 1 }],
               shadowColor: "#000",
@@ -170,7 +173,8 @@ export default function Welcome() {
               elevation: 6,
             })}
           >
-            <Text style={{ color: BRAND, fontSize: 16, fontWeight: "800" }}>{t("authCreateAccount")}</Text>
+            <Text style={{ color: BRAND, fontSize: 16, fontWeight: "800" }}>{t("authGetStarted")}</Text>
+            <Ionicons name="arrow-back" size={18} color={BRAND} />
           </Pressable>
           <Pressable
             onPress={() => router.push("/(auth)/sign-in")}
