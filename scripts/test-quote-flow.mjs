@@ -25,12 +25,13 @@ const admin = createClient(URL, adminEnv.SUPABASE_SERVICE_ROLE_KEY, { auth: { pe
 let pass = 0, fail = 0;
 const ok = (c, m) => (c ? (pass++, console.log("  OK  " + m)) : (fail++, console.log("  FAIL " + m)));
 const client = () => createClient(URL, ANON, { auth: { persistSession: false } });
-const signIn = async (phone) => {
+/** Providers sign in with their six-digit number, customers with their phone. */
+const signInProvider = async (providerNo) => {
   const c = client();
   const { error } = await c.auth.signInWithPassword({
-    email: `${phone}@phone.dalconnect.app`, password: "123456",
+    email: `${providerNo}@pro.dalconnect.app`, password: "123456",
   });
-  if (error) throw new Error(`sign in ${phone}: ${error.message}`);
+  if (error) throw new Error(`sign in provider ${providerNo}: ${error.message}`);
   return c;
 };
 
@@ -45,8 +46,8 @@ if (suErr) { console.error("signup failed:", suErr.message); process.exit(1); }
 const custId = su.user.id;
 
 try {
-  const proA = await signIn("0521000001"); // كهرباء أبو يوسف
-  const proB = await signIn("0502222222"); // خدمات المدينة
+  const proA = await signInProvider("000001"); // كهرباء أبو يوسف (0521000001)
+  const proB = await signInProvider("222222"); // خدمات المدينة   (0502222222)
   const { data: proAu } = await proA.auth.getUser();
   const { data: proBu } = await proB.auth.getUser();
 

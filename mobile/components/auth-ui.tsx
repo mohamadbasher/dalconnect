@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme, spacing } from "../lib/theme";
@@ -53,24 +54,45 @@ export function AuthBrand({ subtitle }: { subtitle?: string }) {
   );
 }
 
-/** Vertically-centered scroll shell shared by both auth screens. */
+/**
+ * Vertically-centered scroll shell shared by both auth screens.
+ *
+ * Keyboard handling matters here: sign-up is long, and the password fields sit
+ * near the bottom. `automaticallyAdjustKeyboardInsets` lets iOS inset the
+ * scroll view for the keyboard (so the focused field and the submit button stay
+ * reachable), and the extra bottom padding guarantees the last control can
+ * always be scrolled clear of it. Content is only centered when it actually
+ * fits — otherwise centering fights the scroll.
+ */
 export function AuthShell({ children }: { children: React.ReactNode }) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [viewport, setViewport] = useState(0);
+  const [contentH, setContentH] = useState(0);
+  // Center only while everything fits; once it overflows (or the keyboard
+  // shrinks the viewport) top-align so scrolling behaves predictably.
+  const fits = viewport === 0 || contentH === 0 || contentH <= viewport;
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView
           contentContainerStyle={{
             flexGrow: 1,
-            justifyContent: "center",
+            justifyContent: fits ? "center" : "flex-start",
             padding: spacing.xl,
+            paddingBottom: spacing.xl + insets.bottom + 24,
             gap: spacing.xl,
           }}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}
+          onLayout={(e) => setViewport(e.nativeEvent.layout.height)}
+          onContentSizeChange={(_w, h) => setContentH(h)}
         >
           {children}
         </ScrollView>

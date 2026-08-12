@@ -50,6 +50,10 @@ export interface Profile {
   is_banned: boolean;
   /** granular staff powers; admins bypass this list entirely */
   permissions: string[];
+  /** six-digit login ID for providers (last 6 of the phone); null for customers */
+  provider_no: string | null;
+  /** groundwork for SMS verification — no OTP is sent yet */
+  phone_verified: boolean;
   created_at: string;
 }
 

@@ -1,15 +1,22 @@
-// Sign up — centered, modern, same design as sign-in. No top header.
-import React, { useState } from "react";
+// Sign up — centered, same design as sign-in.
+//
+// The phone number is both the login identifier and the thing the marketplace
+// later reveals to a matched professional, so it is sanitised while typing and
+// stored in one canonical form (05XXXXXXXX).
+import React, { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { useI18n } from "../../lib/i18n";
-import { useTheme, radius, spacing } from "../../lib/theme";
+import { useTheme, spacing } from "../../lib/theme";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
 import { Button, Input } from "../../components/ui";
 import { AuthShell, AuthBrand, PasswordField, FormError } from "../../components/auth-ui";
 import { useAuth } from "../../context/AuthContext";
-import { isValidIsraeliPhone, normalizePhone } from "../../lib/format";
+import { canonicalIsraeliPhone, phoneProblem, sanitizePhoneInput } from "../../lib/format";
+import type { PhoneProblem } from "../../lib/format";
+
+const MIN_PASSWORD = 6;
 
 type FieldErrors = {
   fullName?: string;
@@ -17,6 +24,14 @@ type FieldErrors = {
   password?: string;
   confirm?: string;
   terms?: string;
+};
+
+const PHONE_ERROR_KEY: Record<PhoneProblem, string> = {
+  required: "authErrRequired",
+  notDigits: "authErrPhoneLetters",
+  tooShort: "authErrPhoneShort",
+  tooLong: "authErrPhoneLong",
+  badPrefix: "authErrPhonePrefix",
 };
 
 export default function SignUp() {
@@ -33,30 +48,48 @@ export default function SignUp() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Errors appear only after the first submit, then keep re-validating live so
+  // the message disappears the moment the field is actually fixed.
+  const [submitted, setSubmitted] = useState(false);
 
-  const validate = () => {
-    const e: FieldErrors = {};
-    if (!fullName.trim()) e.fullName = t("authErrRequired");
-    if (!phone.trim()) e.phone = t("authErrRequired");
-    else if (!isValidIsraeliPhone(phone)) e.phone = t("authErrPhone");
-    if (!password) e.password = t("authErrRequired");
-    else if (password.length < 6) e.password = t("authErrPasswordShort");
-    if (confirm !== password) e.confirm = t("authErrPasswordMatch");
-    if (!agreed) e.terms = t("authErrTerms");
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
+  const computeErrors = useMemo(
+    () => (): FieldErrors => {
+      const e: FieldErrors = {};
+      if (!fullName.trim()) e.fullName = t("authErrRequired");
+      const problem = phoneProblem(phone);
+      if (problem) e.phone = t(PHONE_ERROR_KEY[problem]);
+      if (!password) e.password = t("authErrRequired");
+      else if (password.length < MIN_PASSWORD) e.password = t("authErrPasswordShort");
+      if (!confirm) e.confirm = t("authErrRequired");
+      else if (confirm !== password) e.confirm = t("authErrPasswordMatch");
+      if (!agreed) e.terms = t("authErrTerms");
+      return e;
+    },
+    [fullName, phone, password, confirm, agreed, t]
+  );
+
+  const liveErrors = submitted ? computeErrors() : errors;
 
   const submit = async () => {
     setFormError("");
-    if (!validate()) return;
+    setSubmitted(true);
+    const e = computeErrors();
+    setErrors(e);
+    if (Object.keys(e).length > 0) return;
+
     setLoading(true);
-    const cleanPhone = normalizePhone(phone);
+    const cleanPhone = canonicalIsraeliPhone(phone);
     try {
       await signUp({ fullName: fullName.trim(), phone: cleanPhone, password, lang });
     } catch (err: any) {
       const msg = String(err?.message ?? "");
-      setFormError(/already (registered|exists)/i.test(msg) ? t("authErrPhoneTaken") : t("error"));
+      setFormError(
+        /already (registered|exists)|user_already_exists/i.test(msg)
+          ? t("authErrPhoneTaken")
+          : /network|fetch/i.test(msg)
+            ? t("error")
+            : t("error")
+      );
       setLoading(false);
       return;
     }
@@ -64,72 +97,100 @@ export default function SignUp() {
       await signIn(cleanPhone, password);
       router.replace("/(tabs)");
     } catch {
-      // account exists but auto sign-in failed — send them to sign-in with a friendly note
+      // the account exists but the immediate sign-in failed — hand off with a note
       router.replace({ pathname: "/(auth)/sign-in", params: { notice: "created" } });
     } finally {
       setLoading(false);
     }
   };
 
+  const termsInvalid = Boolean(liveErrors.terms);
+
   return (
     <AuthShell>
       <AuthBrand subtitle={t("authSignUpSubtitle")} />
 
-      {/* form */}
       <View style={{ gap: spacing.lg }}>
         <Input
           label={t("authFullName")}
           value={fullName}
           onChangeText={setFullName}
-          error={errors.fullName}
+          error={liveErrors.fullName}
           placeholder={t("authFullNamePh")}
+          autoCapitalize="words"
+          returnKeyType="next"
         />
         <Input
           label={t("authPhone")}
           value={phone}
-          onChangeText={setPhone}
-          error={errors.phone}
+          // strip anything that isn't a digit as it is typed or pasted, and cap
+          // the length, so letters/spaces/dashes can never reach validation
+          onChangeText={(v) => setPhone(sanitizePhoneInput(v))}
+          error={liveErrors.phone}
           placeholder={t("authPhonePh")}
           keyboardType="phone-pad"
+          textContentType="telephoneNumber"
+          autoComplete="tel"
           autoCorrect={false}
+          maxLength={14}
+          returnKeyType="next"
         />
         <PasswordField
           label={t("authPassword")}
           value={password}
           onChangeText={setPassword}
-          error={errors.password}
+          error={liveErrors.password}
           placeholder={t("authPasswordPh")}
         />
         <PasswordField
           label={t("authConfirmPassword")}
           value={confirm}
           onChangeText={setConfirm}
-          error={errors.confirm}
+          error={liveErrors.confirm}
         />
 
-        {/* terms agreement */}
+        {/* Terms — each document is its own link, not decoration next to a box */}
         <View style={{ gap: 6 }}>
-          <Pressable onPress={() => setAgreed((v) => !v)} style={{ ...ROW, gap: spacing.sm }} hitSlop={6}>
-            <View
+          <View style={{ ...ROW, gap: spacing.sm, alignItems: "flex-start" }}>
+            <Pressable
+              onPress={() => setAgreed((v) => !v)}
+              hitSlop={10}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: agreed }}
               style={{
-                width: 22,
-                height: 22,
-                borderRadius: 7,
+                width: 24,
+                height: 24,
+                borderRadius: 8,
                 borderWidth: 1.5,
-                borderColor: agreed ? colors.brand : colors.border,
+                borderColor: agreed ? colors.brand : termsInvalid ? colors.danger : colors.border,
                 backgroundColor: agreed ? colors.brand : colors.card,
                 alignItems: "center",
                 justifyContent: "center",
+                marginTop: 1,
               }}
             >
-              {agreed ? <Ionicons name="checkmark" size={15} color={colors.onBrand} /> : null}
-            </View>
-            <Text style={[RTL_TEXT, { flex: 1, color: colors.muted, fontSize: 13.5 }]}>
-              {t("authAgreeTerms")}
+              {agreed ? <Ionicons name="checkmark" size={16} color={colors.onBrand} /> : null}
+            </Pressable>
+
+            <Text style={[RTL_TEXT, { flex: 1, color: colors.muted, fontSize: 13.5, lineHeight: 21 }]}>
+              <Text onPress={() => setAgreed((v) => !v)}>{t("authAgreePrefix")}</Text>
+              <Text
+                onPress={() => router.push("/legal?tab=terms")}
+                style={{ color: colors.brand, fontWeight: "700", textDecorationLine: "underline" }}
+              >
+                {t("authTermsLink")}
+              </Text>
+              <Text onPress={() => setAgreed((v) => !v)}>{t("authAgreeAnd")}</Text>
+              <Text
+                onPress={() => router.push("/legal?tab=privacy")}
+                style={{ color: colors.brand, fontWeight: "700", textDecorationLine: "underline" }}
+              >
+                {t("authPrivacyLink")}
+              </Text>
             </Text>
-          </Pressable>
-          {errors.terms ? (
-            <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{errors.terms}</Text>
+          </View>
+          {liveErrors.terms ? (
+            <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{liveErrors.terms}</Text>
           ) : null}
         </View>
 
@@ -137,23 +198,6 @@ export default function SignUp() {
         <Button title={t("authCreateAccount")} onPress={submit} loading={loading} />
       </View>
 
-      {/* professional hint */}
-      <View
-        style={{
-          ...ROW,
-          gap: spacing.sm,
-          backgroundColor: colors.brandTint,
-          borderRadius: radius.md,
-          padding: spacing.md,
-        }}
-      >
-        <MaterialCommunityIcons name="briefcase-outline" size={19} color={colors.brand} />
-        <Text style={[RTL_TEXT, { flex: 1, color: colors.text, fontSize: 13, lineHeight: 19 }]}>
-          {t("authProNote")}
-        </Text>
-      </View>
-
-      {/* go to sign-in */}
       <Pressable
         onPress={() => router.replace("/(auth)/sign-in")}
         style={({ pressed }) => ({ alignItems: "center", opacity: pressed ? 0.7 : 1 })}

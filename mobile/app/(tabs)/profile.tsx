@@ -304,6 +304,38 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* A provider signs in with this number, not their phone — so it has to
+            be somewhere they can always find it. */}
+        {profile.provider_no ? (
+          <View
+            style={{
+              ...ROW,
+              justifyContent: "space-between",
+              gap: spacing.md,
+              backgroundColor: "rgba(255,255,255,0.16)",
+              borderRadius: radius.md,
+              paddingHorizontal: spacing.md,
+              paddingVertical: 10,
+              marginTop: spacing.md,
+            }}
+          >
+            <Text style={[RTL_TEXT, { color: colors.onBrand, fontSize: 12.5, fontWeight: "700", flex: 1 }]}>
+              {t("provSuccessNoLabel")}
+            </Text>
+            <Text
+              style={{
+                color: colors.onBrand,
+                fontSize: 19,
+                fontWeight: "900",
+                letterSpacing: 3,
+                writingDirection: "ltr",
+              }}
+            >
+              {profile.provider_no}
+            </Text>
+          </View>
+        ) : null}
+
         <Pressable
           onPress={() => router.push("/edit-profile")}
           style={({ pressed }) => ({

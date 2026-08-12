@@ -9,7 +9,8 @@ import { ROW, RTL_TEXT } from "../../lib/rtl";
 import { Button, Input } from "../../components/ui";
 import { AuthShell, AuthBrand, PasswordField, FormError } from "../../components/auth-ui";
 import { useAuth } from "../../context/AuthContext";
-import { isValidIsraeliPhone } from "../../lib/format";
+import { isValidIsraeliPhone, sanitizePhoneInput } from "../../lib/format";
+import { looksLikeProviderNo } from "../../lib/supabase";
 
 // Forgotten passwords are reset via support in v1.
 const SUPPORT_WHATSAPP_NUMBER = "972500000000"; // TODO: replace with the real support number
@@ -32,7 +33,8 @@ export default function SignIn() {
     const e: typeof errors = {};
     const id = identifier.trim();
     if (!id) e.identifier = t("authErrRequired");
-    else if (!isValidIsraeliPhone(id)) e.identifier = t("authErrPhone");
+    // a provider signs in with six digits; a customer with a 10-digit phone
+    else if (!looksLikeProviderNo(id) && !isValidIsraeliPhone(id)) e.identifier = t("authErrIdentifier");
     if (!password) e.password = t("authErrRequired");
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -77,9 +79,12 @@ export default function SignIn() {
       {/* form */}
       <View style={{ gap: spacing.lg }}>
         <Input
-          label={t("authPhone")}
+          label={t("authPhoneOrProviderNo")}
           value={identifier}
-          onChangeText={setIdentifier}
+          onChangeText={(v) => setIdentifier(sanitizePhoneInput(v))}
+          maxLength={14}
+          textContentType="telephoneNumber"
+          autoComplete="tel"
           error={errors.identifier}
           placeholder={t("authPhonePh")}
           keyboardType="phone-pad"
@@ -92,6 +97,9 @@ export default function SignIn() {
           onChangeText={setPassword}
           error={errors.password}
         />
+        <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12, marginTop: -6 }]}>
+          {t("authSignInHint")}
+        </Text>
         <FormError message={formError} />
         <Button title={t("authSignInTitle")} onPress={submit} loading={loading} />
       </View>
@@ -103,6 +111,21 @@ export default function SignIn() {
       >
         <Text style={{ color: colors.brand, fontSize: 14, fontWeight: "700" }}>{t("authGoSignUp")}</Text>
       </Pressable>
+
+      {/* providers register on their own track */}
+      <View style={{ gap: spacing.sm, alignItems: "center" }}>
+        <View style={{ height: 1, alignSelf: "stretch", backgroundColor: colors.border }} />
+        <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, textAlign: "center" }]}>
+          {t("provRegEntryHint")}
+        </Text>
+        <Button
+          title={t("provRegEntry")}
+          variant="outline"
+          icon="hammer-wrench"
+          onPress={() => router.push("/(auth)/register-provider")}
+          style={{ alignSelf: "stretch" }}
+        />
+      </View>
 
       {/* forgot password → support */}
       <View style={{ alignItems: "center", gap: spacing.sm }}>

@@ -56,11 +56,58 @@ export const STATUS_TONE: Record<BookingStatus, "neutral" | "brand" | "success" 
   rated: "success",
 };
 
+// ---------------------------------------------------------------------------
+// Phone numbers
+//
+// The phone number is the account identifier AND the thing customers pay to
+// reach, so it is normalised to one canonical local form (05XXXXXXXX) before it
+// ever touches the database. Today only Israeli mobiles are accepted; the
+// helpers below are the single place to widen that later.
+// ---------------------------------------------------------------------------
+
+/** Digits only — drops spaces, dashes, brackets and any pasted formatting. */
 export function normalizePhone(p: string): string {
   return p.replace(/\D/g, "");
 }
 
+/**
+ * Canonical local form for storage/login: `05XXXXXXXX`.
+ * Accepts what people actually paste — `+972 50-123-4567`, `00972...`,
+ * `972...` — and folds it all to the same 10 digits.
+ */
+export function canonicalIsraeliPhone(p: string): string {
+  let d = normalizePhone(p);
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.startsWith("972")) d = `0${d.slice(3)}`;
+  return d;
+}
+
+/** What to allow while the user is typing: digits, optional single leading +. */
+export function sanitizePhoneInput(raw: string): string {
+  const plus = raw.trimStart().startsWith("+");
+  const digits = normalizePhone(raw).slice(0, plus ? 15 : 10);
+  return plus ? `+${digits}` : digits;
+}
+
 export function isValidIsraeliPhone(p: string): boolean {
-  const d = normalizePhone(p);
-  return /^05\d{8}$/.test(d) || /^9725\d{8}$/.test(d);
+  return /^05\d{8}$/.test(canonicalIsraeliPhone(p));
+}
+
+/**
+ * Why a number was rejected, so the field can say something more useful than
+ * "invalid". Returns null when the number is fine.
+ */
+export type PhoneProblem = "required" | "notDigits" | "tooShort" | "tooLong" | "badPrefix";
+
+export function phoneProblem(raw: string): PhoneProblem | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return "required";
+  // anything that isn't a digit, +, space, dash or bracket is a typo (letters)
+  if (/[^\d+\s()-]/.test(trimmed)) return "notDigits";
+  const d = canonicalIsraeliPhone(trimmed);
+  if (!d) return "required";
+  if (d.length < 10) return "tooShort";
+  if (d.length > 10) return "tooLong";
+  if (!/^05/.test(d)) return "badPrefix";
+  return /^05\d{8}$/.test(d) ? null : "badPrefix";
 }

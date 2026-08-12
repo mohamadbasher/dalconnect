@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Session } from "@supabase/supabase-js";
-import { supabase, phoneToEmail } from "../lib/supabase";
+import { supabase, phoneToEmail, providerNoToEmail, identifierToEmail } from "../lib/supabase";
 import { registerPushToken } from "../lib/notifications";
 import type { Lang, Professional, Profile } from "../lib/types";
 
@@ -20,6 +20,8 @@ type AuthCtx = {
   setMode: (m: AccountMode) => void;
   signIn: (identifier: string, password: string) => Promise<void>;
   signUp: (args: { fullName: string; phone: string; password: string; lang: Lang }) => Promise<void>;
+  /** Register a provider account; resolves to their six-digit login number. */
+  signUpProvider: (args: { fullName: string; phone: string; password: string; businessName: string; lang: Lang }) => Promise<string>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -35,6 +37,7 @@ const Ctx = createContext<AuthCtx>({
   setMode: () => {},
   signIn: async () => {},
   signUp: async () => {},
+  signUpProvider: async () => "",
   signOut: async () => {},
   refresh: async () => {},
 });
@@ -84,9 +87,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(MODE_KEY, m).catch(() => {});
   };
 
+  /** Accepts a customer phone OR a provider's six-digit login number. */
   const signIn = async (identifier: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
-      email: phoneToEmail(identifier),
+      email: identifierToEmail(identifier),
       password,
     });
     if (error) throw error;
@@ -99,6 +103,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       options: { data: { full_name: fullName, phone: phone.replace(/\D/g, ""), lang } },
     });
     if (error) throw error;
+  };
+
+  /**
+   * Register a service provider — a separate account from any customer account
+   * on the same phone. Returns the six-digit number they will sign in with.
+   *
+   * The number is the last six digits of the phone; if that is taken the server
+   * suggests a free one. Because it is the local part of the login email, a
+   * lost race shows up as "already registered", and we simply ask for another.
+   */
+  const signUpProvider = async ({
+    fullName,
+    phone,
+    password,
+    businessName,
+    lang,
+  }: {
+    fullName: string;
+    phone: string;
+    password: string;
+    businessName: string;
+    lang: Lang;
+  }): Promise<string> => {
+    const digits = phone.replace(/\D/g, "");
+
+    const { data: exists } = await supabase.rpc("provider_exists_for_phone", { p_phone: digits });
+    if (exists) throw new Error("PROVIDER_EXISTS");
+
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const { data: suggested, error: rpcErr } = await supabase.rpc("suggest_provider_no", {
+        p_phone: digits,
+      });
+      if (rpcErr || !suggested) throw rpcErr ?? new Error("NO_PROVIDER_NUMBER");
+      const providerNo = String(suggested);
+
+      const { error } = await supabase.auth.signUp({
+        email: providerNoToEmail(providerNo),
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            phone: digits,
+            lang,
+            role: "professional",
+            provider_no: providerNo,
+            business_name: businessName,
+          },
+        },
+      });
+      if (!error) return providerNo;
+      // someone took that number between the suggestion and the insert
+      if (!/already (registered|exists)|user_already_exists/i.test(error.message)) throw error;
+    }
+    throw new Error("NO_PROVIDER_NUMBER");
   };
 
   const signOut = async () => {
@@ -127,6 +185,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setMode,
       signIn,
       signUp,
+      signUpProvider,
       signOut,
       refresh,
     }),

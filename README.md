@@ -61,9 +61,16 @@ never from browsing.
   triggers for notifications/commission/ratings, one atomic RPC per multi-step
   operation (`accept_offer`, `become_professional`, `delete_account`), Storage for
   photos/avatars/ID docs, an Edge Function for push delivery.
-- **Auth**: phone + password. Phones map to a synthetic email
-  (`<digits>@phone.dalconnect.app`) — no SMS provider, no per-message cost. See backlog
-  for real OTP.
+- **Auth**: phone + password, no SMS provider and no per-message cost. Supabase needs a
+  unique email per account, so each role gets its own synthetic address — and because
+  they differ, **one phone number can hold both a customer and a provider account**:
+  - customer → `<phone>@phone.dalconnect.app`, signs in with the phone
+  - provider → `<provider_no>@pro.dalconnect.app`, signs in with a **six-digit number**
+    (the last six digits of their phone, or a random free one if those are taken).
+    Modelled on Dal's `merchantNo`; a 6-digit login can never be confused with a
+    10-digit phone. Providers **register on their own track** — a customer account is
+    never "upgraded".
+  Phone numbers are **not verified yet** — see note #13.
 - **Admin**: Next.js 15 App Router, `@supabase/ssr` cookie auth, server actions using
   the service-role key server-side only.
 
@@ -122,6 +129,14 @@ never from browsing.
 12. **Supabase free-tier projects pause when idle.** If API calls suddenly time out,
     check the project status — it may need restoring from the dashboard (this already
     happened once during development).
+13. **Phone numbers are NOT verified — treat this as a launch blocker.** Anyone can
+    register with a number they don't own. That matters more here than in a normal app,
+    because the phone number *is* the product: it's what gets revealed to a customer
+    once they accept a quote. A professional could sign up with a fake or someone
+    else's number. The groundwork is in place (`profiles.phone_verified`, defaulting to
+    false so no backfill is needed), but no OTP is sent. Deferred by decision — wire up
+    Supabase phone auth with an SMS provider (Twilio/Vonage, roughly ₪0.10–0.20 per
+    message) before real users.
 
 ---
 
@@ -158,16 +173,19 @@ Promote a user to admin from the Supabase SQL editor:
 
 ## Demo accounts (testing only — see note #4)
 
-| Role | Phone | Password |
-|------|-------|----------|
-| Customer | `0501111111` | `123456` |
-| Service provider | `0502222222` | `123456` |
-| Admin | `0503333333` | `123456` |
+Customers sign in with their **phone**; service providers sign in with their
+**six-digit number** (the last six digits of their phone). Password for all: `123456`.
 
-Plus 8 additional demo professionals (electrician, plumber, AC, painter, carpenter,
-gardener, cleaner, mechanic) with phones `0521000001`–`0521000008`, same password —
-so the marketplace has realistic listings while testing. All created via
-`scripts/seed-users.mjs` and `scripts/seed-demo-pros.mjs` (safe to re-run; idempotent).
+| Role | Sign in with | Who |
+|------|--------------|-----|
+| Customer | `0501111111` | زبون تجريبي |
+| Admin (web panel) | `0503333333` | مدير النظام |
+| Provider | `222222` | خدمات المدينة — electrician / plumber / AC |
+| Provider | `000001` | كهرباء أبو يوسف — electrician + solar |
+| Provider | `000002` … `000008` | plumber, AC, painter, carpenter, gardener, cleaner, mechanic |
+
+Seeded by `scripts/seed-users.mjs` and `scripts/seed-demo-pros.mjs` (both idempotent).
+
 
 ## Scripts (`scripts/`)
 
