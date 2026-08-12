@@ -1,4 +1,4 @@
-// Sign up — centered, same design as sign-in.
+// Customer registration — same visual system as sign-in (brand hero + sheet).
 //
 // The phone number is both the login identifier and the thing the marketplace
 // later reveals to a matched professional, so it is sanitised while typing and
@@ -10,8 +10,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { useI18n } from "../../lib/i18n";
 import { useTheme, spacing } from "../../lib/theme";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
-import { Button, Input } from "../../components/ui";
-import { AuthShell, AuthBrand, PasswordField, FormError } from "../../components/auth-ui";
+import {
+  AuthScreen,
+  AuthHero,
+  AuthSheet,
+  AuthTabs,
+  AuthCta,
+  AuthLink,
+  IconInput,
+  PasswordField,
+  FormError,
+} from "../../components/auth-ui";
 import { useAuth } from "../../context/AuthContext";
 import { canonicalIsraeliPhone, phoneProblem, sanitizePhoneInput } from "../../lib/format";
 import type { PhoneProblem } from "../../lib/format";
@@ -107,103 +116,119 @@ export default function SignUp() {
   const termsInvalid = Boolean(liveErrors.terms);
 
   return (
-    <AuthShell>
-      <AuthBrand subtitle={t("authSignUpSubtitle")} />
+    <AuthScreen>
+      <AuthHero
+        title={t("appName")}
+        tagline={t("authSignUpSubtitle")}
+        onBack={router.canGoBack() ? () => router.back() : undefined}
+      />
 
-      <View style={{ gap: spacing.lg }}>
-        <Input
-          label={t("authFullName")}
-          value={fullName}
-          onChangeText={setFullName}
-          error={liveErrors.fullName}
-          placeholder={t("authFullNamePh")}
-          autoCapitalize="words"
-          returnKeyType="next"
-        />
-        <Input
-          label={t("authPhone")}
-          value={phone}
-          // strip anything that isn't a digit as it is typed or pasted, and cap
-          // the length, so letters/spaces/dashes can never reach validation
-          onChangeText={(v) => setPhone(sanitizePhoneInput(v))}
-          error={liveErrors.phone}
-          placeholder={t("authPhonePh")}
-          keyboardType="phone-pad"
-          textContentType="telephoneNumber"
-          autoComplete="tel"
-          autoCorrect={false}
-          maxLength={14}
-          returnKeyType="next"
-        />
-        <PasswordField
-          label={t("authPassword")}
-          value={password}
-          onChangeText={setPassword}
-          error={liveErrors.password}
-          placeholder={t("authPasswordPh")}
-        />
-        <PasswordField
-          label={t("authConfirmPassword")}
-          value={confirm}
-          onChangeText={setConfirm}
-          error={liveErrors.confirm}
+      <AuthSheet>
+        <AuthTabs
+          value="signUp"
+          options={[
+            { key: "signIn", label: t("authSignInTitle") },
+            { key: "signUp", label: t("authCreateAccount") },
+          ]}
+          onChange={() => router.replace("/(auth)/sign-in")}
         />
 
-        {/* Terms — each document is its own link, not decoration next to a box */}
-        <View style={{ gap: 6 }}>
-          <View style={{ ...ROW, gap: spacing.sm, alignItems: "flex-start" }}>
-            <Pressable
-              onPress={() => setAgreed((v) => !v)}
-              hitSlop={10}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: agreed }}
-              style={{
-                width: 24,
-                height: 24,
-                borderRadius: 8,
-                borderWidth: 1.5,
-                borderColor: agreed ? colors.brand : termsInvalid ? colors.danger : colors.border,
-                backgroundColor: agreed ? colors.brand : colors.card,
-                alignItems: "center",
-                justifyContent: "center",
-                marginTop: 1,
-              }}
-            >
-              {agreed ? <Ionicons name="checkmark" size={16} color={colors.onBrand} /> : null}
-            </Pressable>
+        <View style={{ marginTop: spacing.xl, gap: 14 }}>
+          <IconInput
+            label={t("authFullName")}
+            icon="person-outline"
+            value={fullName}
+            onChangeText={setFullName}
+            error={liveErrors.fullName}
+            placeholder={t("authFullNamePh")}
+            autoCapitalize="words"
+            returnKeyType="next"
+          />
+          <IconInput
+            label={t("authPhone")}
+            icon="call-outline"
+            value={phone}
+            // strip anything that isn't a digit as it is typed or pasted, and cap
+            // the length, so letters/spaces/dashes can never reach validation
+            onChangeText={(v) => setPhone(sanitizePhoneInput(v))}
+            error={liveErrors.phone}
+            placeholder={t("authPhonePh")}
+            keyboardType="phone-pad"
+            textContentType="telephoneNumber"
+            autoComplete="tel"
+            autoCorrect={false}
+            maxLength={14}
+            returnKeyType="next"
+            // a phone number is Latin digits — keep it left-to-right
+            inputStyle={{ textAlign: "right", writingDirection: "ltr" }}
+          />
+          <PasswordField
+            label={t("authPassword")}
+            value={password}
+            onChangeText={setPassword}
+            error={liveErrors.password}
+            placeholder={t("authPasswordPh")}
+          />
+          <PasswordField
+            label={t("authConfirmPassword")}
+            value={confirm}
+            onChangeText={setConfirm}
+            error={liveErrors.confirm}
+          />
 
-            <Text style={[RTL_TEXT, { flex: 1, color: colors.muted, fontSize: 13.5, lineHeight: 21 }]}>
-              <Text onPress={() => setAgreed((v) => !v)}>{t("authAgreePrefix")}</Text>
-              <Text
-                onPress={() => router.push("/legal?tab=terms")}
-                style={{ color: colors.brand, fontWeight: "700", textDecorationLine: "underline" }}
+          {/* Terms — each document is its own link, not decoration next to a box */}
+          <View style={{ gap: 6 }}>
+            <View style={{ ...ROW, gap: spacing.sm, alignItems: "flex-start" }}>
+              <Pressable
+                onPress={() => setAgreed((v) => !v)}
+                hitSlop={10}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: agreed }}
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 8,
+                  borderWidth: 1.5,
+                  borderColor: agreed ? colors.brand : termsInvalid ? colors.danger : colors.border,
+                  backgroundColor: agreed ? colors.brand : colors.card,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginTop: 1,
+                }}
               >
-                {t("authTermsLink")}
+                {agreed ? <Ionicons name="checkmark" size={16} color={colors.onBrand} /> : null}
+              </Pressable>
+
+              <Text style={[RTL_TEXT, { flex: 1, color: colors.muted, fontSize: 13.5, lineHeight: 21 }]}>
+                <Text onPress={() => setAgreed((v) => !v)}>{t("authAgreePrefix")}</Text>
+                <Text
+                  onPress={() => router.push("/legal?tab=terms")}
+                  style={{ color: colors.brand, fontWeight: "700", textDecorationLine: "underline" }}
+                >
+                  {t("authTermsLink")}
+                </Text>
+                <Text onPress={() => setAgreed((v) => !v)}>{t("authAgreeAnd")}</Text>
+                <Text
+                  onPress={() => router.push("/legal?tab=privacy")}
+                  style={{ color: colors.brand, fontWeight: "700", textDecorationLine: "underline" }}
+                >
+                  {t("authPrivacyLink")}
+                </Text>
               </Text>
-              <Text onPress={() => setAgreed((v) => !v)}>{t("authAgreeAnd")}</Text>
-              <Text
-                onPress={() => router.push("/legal?tab=privacy")}
-                style={{ color: colors.brand, fontWeight: "700", textDecorationLine: "underline" }}
-              >
-                {t("authPrivacyLink")}
-              </Text>
-            </Text>
+            </View>
+            {liveErrors.terms ? (
+              <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{liveErrors.terms}</Text>
+            ) : null}
           </View>
-          {liveErrors.terms ? (
-            <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{liveErrors.terms}</Text>
-          ) : null}
+
+          <FormError message={formError} />
+          <AuthCta title={t("authCreateAccount")} onPress={submit} loading={loading} />
         </View>
 
-        <FormError message={formError} />
-        <Button title={t("authCreateAccount")} onPress={submit} loading={loading} />
-      </View>
-
-      <Pressable
-        onPress={() => router.replace("/(auth)/sign-in")}
-        style={({ pressed }) => ({ alignItems: "center", opacity: pressed ? 0.7 : 1 })}
-      >
-        <Text style={{ color: colors.brand, fontSize: 14, fontWeight: "700" }}>{t("authGoSignIn")}</Text>
-      </Pressable>
-    </AuthShell>
+        <View style={{ marginTop: spacing.lg }}>
+          <AuthLink label={t("authGoSignIn")} onPress={() => router.replace("/(auth)/sign-in")} />
+        </View>
+      </AuthSheet>
+    </AuthScreen>
   );
 }

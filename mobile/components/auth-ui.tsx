@@ -1,102 +1,292 @@
-// Shared layout + fields for the sign-in / sign-up screens so they share one
-// centered, modern design. No top header — the brand badge sits in the middle.
+// Shared chrome for the pre-login screens — Dal's auth design: a full-bleed
+// brand gradient hero with a floating white sheet pulled up over it.
+//
+// The hero is the one sanctioned place where white is hardcoded: it is painted
+// on the brand gradient, so `colors.text` (near-black) would be unreadable.
+// Everything inside the sheet uses theme tokens.
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
+  StyleProp,
   Text,
+  TextInput,
+  TextInputProps,
+  TextStyle,
   View,
+  ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
+import { StatusBar } from "expo-status-bar";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useTheme, spacing } from "../lib/theme";
-import { RTL_TEXT } from "../lib/rtl";
-import { Input } from "./ui";
+import { useTheme, radius, spacing, brandGradientProps } from "../lib/theme";
+import { ROW, RTL_TEXT } from "../lib/rtl";
 
-/** Brand badge + "DalConnect" wordmark, centered. */
-export function AuthBrand({ subtitle }: { subtitle?: string }) {
-  const { colors, shadows } = useTheme();
+/** White-on-brand ink for the hero (see file header). */
+const HERO_INK = "#ffffff";
+const HERO_INK_SOFT = "rgba(255,255,255,0.85)";
+const HERO_GLASS = "rgba(255,255,255,0.18)";
+const HERO_GLASS_EDGE = "rgba(255,255,255,0.35)";
+
+/**
+ * Scroll shell shared by every auth screen: brand-coloured backdrop (so the
+ * bounce above the hero stays brand, never white) + the keyboard handling the
+ * long forms need — the sheet insets itself for the keyboard and the last
+ * control can always be scrolled clear of it.
+ */
+export function AuthScreen({ children }: { children: React.ReactNode }) {
+  const { colors } = useTheme();
   return (
-    <View style={{ alignItems: "center", gap: spacing.md }}>
-      <LinearGradient
-        colors={[colors.brand, colors.brandDark]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{
-          width: 88,
-          height: 88,
-          borderRadius: 26,
-          alignItems: "center",
-          justifyContent: "center",
-          ...shadows.cta,
-        }}
-      >
-        <MaterialCommunityIcons name="hammer-wrench" size={42} color="#ffffff" />
-      </LinearGradient>
-      <Text
-        style={{
-          color: colors.text,
-          fontSize: 26,
-          fontWeight: "800",
-          writingDirection: "ltr",
-          letterSpacing: 0.3,
-        }}
-      >
-        DalConnect
-      </Text>
-      {subtitle ? (
-        <Text style={{ color: colors.muted, fontSize: 14.5, textAlign: "center" }}>{subtitle}</Text>
-      ) : null}
+    <View style={{ flex: 1, backgroundColor: colors.brand }}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
+          showsVerticalScrollIndicator={false}
+        >
+          {children}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
 /**
- * Vertically-centered scroll shell shared by both auth screens.
- *
- * Keyboard handling matters here: sign-up is long, and the password fields sit
- * near the bottom. `automaticallyAdjustKeyboardInsets` lets iOS inset the
- * scroll view for the keyboard (so the focused field and the submit button stay
- * reachable), and the extra bottom padding guarantees the last control can
- * always be scrolled clear of it. Content is only centered when it actually
- * fits — otherwise centering fights the scroll.
+ * Brand gradient hero: round glass badge, title, tagline, and an optional back
+ * button. RTL — the back button sits on the start (right) edge and points
+ * forward (right), the direction "back" actually is in an RTL layout.
  */
-export function AuthShell({ children }: { children: React.ReactNode }) {
+export function AuthHero({
+  title,
+  tagline,
+  icon = "hammer-wrench",
+  onBack,
+}: {
+  title: string;
+  tagline?: string;
+  icon?: keyof typeof MaterialCommunityIcons.glyphMap;
+  onBack?: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  return (
+    <LinearGradient
+      {...brandGradientProps}
+      style={{ paddingTop: insets.top + 26, paddingBottom: 46, alignItems: "center", overflow: "hidden" }}
+    >
+      {/* the hero owns the top of the screen, so the bar has to go light */}
+      <StatusBar style="light" />
+
+      {onBack ? (
+        <Pressable
+          onPress={onBack}
+          hitSlop={10}
+          style={({ pressed }) => ({
+            position: "absolute",
+            right: 14,
+            top: insets.top + 6,
+            width: 38,
+            height: 38,
+            borderRadius: radius.full,
+            backgroundColor: HERO_GLASS,
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <Ionicons name="arrow-forward" size={20} color={HERO_INK} />
+        </Pressable>
+      ) : null}
+
+      <View
+        style={{
+          width: 76,
+          height: 76,
+          borderRadius: 24,
+          backgroundColor: HERO_GLASS,
+          borderWidth: 1,
+          borderColor: HERO_GLASS_EDGE,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <MaterialCommunityIcons name={icon} size={38} color={HERO_INK} />
+      </View>
+
+      <Text
+        style={{
+          color: HERO_INK,
+          fontSize: 21,
+          fontWeight: "800",
+          marginTop: 12,
+          textAlign: "center",
+          paddingHorizontal: 30,
+        }}
+      >
+        {title}
+      </Text>
+      {tagline ? (
+        <Text
+          style={{
+            color: HERO_INK_SOFT,
+            fontSize: 13,
+            marginTop: 4,
+            textAlign: "center",
+            paddingHorizontal: 32,
+            lineHeight: 19,
+          }}
+        >
+          {tagline}
+        </Text>
+      ) : null}
+    </LinearGradient>
+  );
+}
+
+/** The white sheet that floats over the hero, with its grab handle. */
+export function AuthSheet({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const [viewport, setViewport] = useState(0);
-  const [contentH, setContentH] = useState(0);
-  // Center only while everything fits; once it overflows (or the keyboard
-  // shrinks the viewport) top-align so scrolling behaves predictably.
-  const fits = viewport === 0 || contentH === 0 || contentH <= viewport;
-
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+    <View
+      style={[
+        {
+          flexGrow: 1,
+          backgroundColor: colors.card,
+          borderTopLeftRadius: 34,
+          borderTopRightRadius: 34,
+          marginTop: -26,
+          paddingHorizontal: 24,
+          paddingTop: 22,
+          // generous tail so the CTA clears the keyboard and the home bar
+          paddingBottom: 28 + insets.bottom,
+        },
+        style,
+      ]}
+    >
+      <View
+        style={{
+          alignSelf: "center",
+          width: 44,
+          height: 4,
+          borderRadius: radius.full,
+          backgroundColor: colors.border,
+          marginBottom: 18,
+        }}
+      />
+      {children}
+    </View>
+  );
+}
+
+/** Segmented pill switching between the two halves of a flow. */
+export function AuthTabs<K extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: K;
+  options: { key: K; label: string }[];
+  onChange: (key: K) => void;
+}) {
+  const { colors, shadows } = useTheme();
+  return (
+    <View
+      style={{
+        flexDirection: "row-reverse",
+        backgroundColor: colors.bg,
+        borderRadius: radius.full,
+        padding: 5,
+        borderWidth: 1,
+        borderColor: colors.border,
+      }}
+    >
+      {options.map((o) => {
+        const on = o.key === value;
+        return (
+          <Pressable
+            key={o.key}
+            onPress={() => (on ? undefined : onChange(o.key))}
+            style={[
+              { flex: 1, paddingVertical: 13, borderRadius: radius.full, alignItems: "center" },
+              on ? { backgroundColor: colors.brand, ...shadows.cta } : null,
+            ]}
+          >
+            <Text
+              style={{
+                fontSize: 15,
+                fontWeight: "800",
+                color: on ? colors.onBrand : colors.muted,
+              }}
+            >
+              {o.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Labelled input row with a leading Ionicon and an optional trailing control. */
+export function IconInput({
+  label,
+  icon,
+  error,
+  hint,
+  trailing,
+  inputStyle,
+  style,
+  ...props
+}: TextInputProps & {
+  label?: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  error?: string;
+  /** Small muted line under the field (e.g. what the six-digit number is). */
+  hint?: string;
+  trailing?: React.ReactNode;
+  inputStyle?: StyleProp<TextStyle>;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ gap: 7 }}>
+      {label ? (
+        <Text style={[RTL_TEXT, { fontSize: 13, fontWeight: "700", color: colors.text }]}>{label}</Text>
+      ) : null}
+      <View
+        style={{
+          flexDirection: "row-reverse",
+          alignItems: "center",
+          gap: 10,
+          backgroundColor: colors.bg,
+          borderWidth: 1,
+          borderColor: error ? colors.danger : colors.border,
+          borderRadius: 15,
+          paddingHorizontal: 15,
+        }}
       >
-        <ScrollView
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: fits ? "center" : "flex-start",
-            padding: spacing.xl,
-            paddingBottom: spacing.xl + insets.bottom + 24,
-            gap: spacing.xl,
-          }}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          automaticallyAdjustKeyboardInsets
-          showsVerticalScrollIndicator={false}
-          onLayout={(e) => setViewport(e.nativeEvent.layout.height)}
-          onContentSizeChange={(_w, h) => setContentH(h)}
-        >
-          {children}
-        </ScrollView>
-      </KeyboardAvoidingView>
+        <Ionicons name={icon} size={18} color={error ? colors.danger : colors.faint} />
+        <TextInput
+          placeholderTextColor={colors.faint}
+          {...props}
+          style={[
+            RTL_TEXT,
+            { flex: 1, paddingVertical: 15, fontSize: 15, color: colors.text },
+            inputStyle,
+            style,
+          ]}
+        />
+        {trailing}
+      </View>
+      {hint ? (
+        <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 11.5, lineHeight: 17 }]}>{hint}</Text>
+      ) : null}
+      {error ? <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{error}</Text> : null}
     </View>
   );
 }
@@ -118,36 +308,149 @@ export function PasswordField({
   const { colors } = useTheme();
   const [visible, setVisible] = useState(false);
   return (
-    <View style={{ gap: 6 }}>
-      <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, fontWeight: "600" }]}>{label}</Text>
-      <View style={{ justifyContent: "center" }}>
-        <Input
-          value={value}
-          onChangeText={onChangeText}
-          secureTextEntry={!visible}
-          autoCapitalize="none"
-          placeholder={placeholder}
-          style={{ paddingLeft: 46 }}
-        />
-        <Pressable onPress={() => setVisible((v) => !v)} hitSlop={10} style={{ position: "absolute", left: 14 }}>
+    <IconInput
+      label={label}
+      icon="lock-closed-outline"
+      value={value}
+      onChangeText={onChangeText}
+      error={error}
+      placeholder={placeholder}
+      secureTextEntry={!visible}
+      autoCapitalize="none"
+      autoCorrect={false}
+      trailing={
+        <Pressable onPress={() => setVisible((v) => !v)} hitSlop={10}>
           <Ionicons name={visible ? "eye-off-outline" : "eye-outline"} size={20} color={colors.faint} />
         </Pressable>
-      </View>
-      {error ? <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{error}</Text> : null}
-    </View>
+      }
+    />
   );
 }
 
-/** Inline form-level error row. */
+/** Form-level error — an inline box, never an Alert. */
 export function FormError({ message }: { message: string }) {
   const { colors } = useTheme();
   if (!message) return null;
   return (
-    <View style={{ flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm }}>
-      <Ionicons name="alert-circle" size={17} color={colors.danger} />
-      <Text style={[RTL_TEXT, { flex: 1, color: colors.danger, fontSize: 13, fontWeight: "600" }]}>
+    <View
+      style={{
+        flexDirection: "row-reverse",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        backgroundColor: colors.dangerTint,
+        borderRadius: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+      }}
+    >
+      <Ionicons name="alert-circle" size={16} color={colors.danger} />
+      <Text style={{ flex: 1, color: colors.danger, fontSize: 13, fontWeight: "600", textAlign: "right" }}>
         {message}
       </Text>
+    </View>
+  );
+}
+
+/** The screen's primary action — brand fill, glow, trailing forward arrow. */
+export function AuthCta({
+  title,
+  onPress,
+  loading,
+  disabled,
+}: {
+  title: string;
+  onPress: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+}) {
+  const { colors, shadows } = useTheme();
+  const off = loading || disabled;
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={off}
+      style={({ pressed }) => [
+        {
+          flexDirection: "row-reverse",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          backgroundColor: colors.brand,
+          borderRadius: 16,
+          paddingVertical: 17,
+          marginTop: 2,
+          opacity: off ? 0.6 : 1,
+        },
+        shadows.cta,
+        off ? { shadowOpacity: 0, elevation: 0 } : null,
+        pressed && !off ? { opacity: 0.9, transform: [{ scale: 0.99 }] } : null,
+      ]}
+    >
+      {loading ? (
+        <ActivityIndicator color={colors.onBrand} />
+      ) : (
+        <>
+          <Text style={{ color: colors.onBrand, fontSize: 16, fontWeight: "800" }}>{title}</Text>
+          {/* RTL: forward is leftward */}
+          <Ionicons name="arrow-back" size={18} color={colors.onBrand} />
+        </>
+      )}
+    </Pressable>
+  );
+}
+
+/** Quiet text link ("already have an account?"). */
+export function AuthLink({ label, onPress }: { label: string; onPress: () => void }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => ({ alignItems: "center", opacity: pressed ? 0.7 : 1 })}>
+      <Text style={{ color: colors.brand, fontSize: 14, fontWeight: "700" }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * Cross-role footer: hairline, a muted hint, then an outlined button — the way
+ * Dal hands a merchant off from the customer form.
+ */
+export function AuthFooter({
+  hint,
+  action,
+  icon,
+  onPress,
+}: {
+  hint: string;
+  action: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ marginTop: spacing.lg, gap: 10 }}>
+      <View style={{ height: 1, backgroundColor: colors.border }} />
+      <Text style={{ color: colors.muted, fontSize: 12.5, textAlign: "center", lineHeight: 19, marginTop: 6 }}>
+        {hint}
+      </Text>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          {
+            ...ROW,
+            justifyContent: "center",
+            gap: 8,
+            backgroundColor: colors.card,
+            borderWidth: 1.5,
+            borderColor: colors.brand,
+            borderRadius: 14,
+            paddingVertical: 15,
+          },
+          pressed ? { opacity: 0.85 } : null,
+        ]}
+      >
+        {icon ? <Ionicons name={icon} size={19} color={colors.brand} /> : null}
+        <Text style={{ color: colors.brand, fontWeight: "800", fontSize: 15 }}>{action}</Text>
+      </Pressable>
     </View>
   );
 }

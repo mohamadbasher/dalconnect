@@ -3,27 +3,25 @@
 //
 // The six-digit login number is derived from the last six digits of the phone
 // and previewed live, so the provider knows it before they submit.
-import React, { useEffect, useMemo, useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import React, { useMemo, useState } from "react";
+import { Modal, Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useI18n } from "../../lib/i18n";
-import { useTheme, radius, spacing, brandGradientProps } from "../../lib/theme";
+import { useTheme, radius, spacing } from "../../lib/theme";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
-import { Button, Input } from "../../components/ui";
-import { PasswordField, FormError } from "../../components/auth-ui";
+import { Button } from "../../components/ui";
+import {
+  AuthScreen,
+  AuthHero,
+  AuthSheet,
+  AuthCta,
+  AuthLink,
+  IconInput,
+  PasswordField,
+  FormError,
+} from "../../components/auth-ui";
 import { useAuth } from "../../context/AuthContext";
 import { canonicalIsraeliPhone, phoneProblem, sanitizePhoneInput } from "../../lib/format";
 import type { PhoneProblem } from "../../lib/format";
@@ -49,7 +47,6 @@ type FieldErrors = {
 
 export default function RegisterProvider() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { colors, shadows } = useTheme();
   const { signUpProvider, signIn } = useAuth();
@@ -136,247 +133,158 @@ export default function RegisterProvider() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.brand }}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <ScrollView
-          contentContainerStyle={{ flexGrow: 1 }}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          automaticallyAdjustKeyboardInsets
-          showsVerticalScrollIndicator={false}
-        >
-          {/* brand hero */}
-          <LinearGradient
-            {...brandGradientProps}
-            style={{ paddingTop: insets.top + 26, paddingBottom: 46, alignItems: "center" }}
-          >
-            <Pressable
-              onPress={() => router.back()}
-              hitSlop={10}
-              style={{
-                position: "absolute",
-                // RTL: back sits on the start (right) edge
-                right: 14,
-                top: insets.top + 6,
-                width: 38,
-                height: 38,
-                borderRadius: 19,
-                backgroundColor: "rgba(255,255,255,0.18)",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Ionicons name="arrow-forward" size={20} color="#fff" />
-            </Pressable>
+      <AuthScreen>
+        <AuthHero
+          title={t("provRegTitle")}
+          tagline={t("provRegTagline")}
+          icon="hammer-wrench"
+          onBack={() => router.back()}
+        />
 
-            <View
-              style={{
-                width: 76,
-                height: 76,
-                borderRadius: 24,
-                backgroundColor: "rgba(255,255,255,0.18)",
-                borderWidth: 1,
-                borderColor: "rgba(255,255,255,0.35)",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <MaterialCommunityIcons name="hammer-wrench" size={38} color="#fff" />
-            </View>
-            <Text
-              style={{
-                color: "#fff",
-                fontSize: 21,
-                fontWeight: "800",
-                marginTop: 12,
-                textAlign: "center",
-                paddingHorizontal: 30,
-              }}
-            >
-              {t("provRegTitle")}
-            </Text>
-            <Text
-              style={{
-                color: "rgba(255,255,255,0.85)",
-                fontSize: 13,
-                marginTop: 4,
-                textAlign: "center",
-                paddingHorizontal: 32,
-              }}
-            >
-              {t("provRegTagline")}
-            </Text>
-          </LinearGradient>
-
-          {/* floating sheet */}
-          <View
-            style={{
-              flexGrow: 1,
-              backgroundColor: colors.bg,
-              borderTopLeftRadius: 34,
-              borderTopRightRadius: 34,
-              marginTop: -26,
-              paddingBottom: insets.bottom + spacing.xxl,
-            }}
-          >
-            <View
-              style={{
-                alignSelf: "center",
-                width: 44,
-                height: 4,
-                borderRadius: radius.full,
-                backgroundColor: colors.border,
-                marginTop: 14,
-              }}
+        <AuthSheet>
+          <View style={{ gap: 14 }}>
+            <IconInput
+              label={t("authFullName")}
+              icon="person-outline"
+              value={fullName}
+              onChangeText={setFullName}
+              error={liveErrors.fullName}
+              placeholder={t("authFullNamePh")}
+              autoCapitalize="words"
+            />
+            <IconInput
+              label={t("provBusinessName")}
+              icon="briefcase-outline"
+              value={businessName}
+              onChangeText={setBusinessName}
+              error={liveErrors.businessName}
+              placeholder={t("provBusinessNamePh")}
+            />
+            <IconInput
+              label={t("authPhone")}
+              icon="call-outline"
+              value={phone}
+              onChangeText={(v) => setPhone(sanitizePhoneInput(v))}
+              error={liveErrors.phone}
+              placeholder={t("authPhonePh")}
+              keyboardType="phone-pad"
+              textContentType="telephoneNumber"
+              autoComplete="tel"
+              autoCorrect={false}
+              maxLength={14}
+              // a phone number is Latin digits — keep it left-to-right
+              inputStyle={{ textAlign: "right", writingDirection: "ltr" }}
             />
 
-            <View style={{ padding: spacing.lg, gap: spacing.lg }}>
-              <Input
-                label={t("authFullName")}
-                value={fullName}
-                onChangeText={setFullName}
-                error={liveErrors.fullName}
-                placeholder={t("authFullNamePh")}
-                autoCapitalize="words"
-              />
-              <Input
-                label={t("provBusinessName")}
-                value={businessName}
-                onChangeText={setBusinessName}
-                error={liveErrors.businessName}
-                placeholder={t("provBusinessNamePh")}
-              />
-              <Input
-                label={t("authPhone")}
-                value={phone}
-                onChangeText={(v) => setPhone(sanitizePhoneInput(v))}
-                error={liveErrors.phone}
-                placeholder={t("authPhonePh")}
-                keyboardType="phone-pad"
-                textContentType="telephoneNumber"
-                autoComplete="tel"
-                autoCorrect={false}
-                maxLength={14}
-              />
-
-              {/* the login number, derived and read-only */}
-              <View style={{ gap: 6 }}>
-                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, fontWeight: "600" }]}>
-                  {t("provNoLabel")}
-                </Text>
-                <View pointerEvents="none">
-                  <TextInput
-                    editable={false}
-                    value={previewNo}
-                    placeholder={t("provNoPlaceholder")}
-                    placeholderTextColor={colors.faint}
-                    style={{
-                      backgroundColor: colors.chip,
-                      borderWidth: 1.5,
-                      borderColor: colors.border,
-                      borderRadius: radius.md,
-                      paddingHorizontal: 14,
-                      paddingVertical: 12,
-                      fontSize: previewNo ? 18 : 14,
-                      fontWeight: previewNo ? "800" : "400",
-                      color: previewNo ? colors.brandDark : colors.faint,
-                      textAlign: "center",
-                      // spacing the digits helps them read as a code, but it
-                      // would tear the placeholder sentence apart
-                      letterSpacing: previewNo ? 4 : 0,
-                    }}
-                  />
-                </View>
-                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 11.5, lineHeight: 17 }]}>
-                  {t("provNoHint")}
-                </Text>
-              </View>
-
-              <PasswordField
-                label={t("authPassword")}
-                value={password}
-                onChangeText={setPassword}
-                error={liveErrors.password}
-                placeholder={t("authPasswordPh")}
-              />
-              <PasswordField
-                label={t("authConfirmPassword")}
-                value={confirm}
-                onChangeText={setConfirm}
-                error={liveErrors.confirm}
-              />
-
-              {/* terms */}
-              <View style={{ gap: 6 }}>
-                <View style={{ ...ROW, gap: spacing.sm, alignItems: "flex-start" }}>
-                  <Pressable
-                    onPress={() => setAgreed((v) => !v)}
-                    hitSlop={10}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: agreed }}
-                    style={{
-                      width: 24,
-                      height: 24,
-                      borderRadius: 8,
-                      borderWidth: 1.5,
-                      borderColor: agreed ? colors.brand : termsInvalid ? colors.danger : colors.border,
-                      backgroundColor: agreed ? colors.brand : colors.card,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginTop: 1,
-                    }}
-                  >
-                    {agreed ? <Ionicons name="checkmark" size={16} color={colors.onBrand} /> : null}
-                  </Pressable>
-                  <Text style={[RTL_TEXT, { flex: 1, color: colors.muted, fontSize: 13.5, lineHeight: 21 }]}>
-                    <Text onPress={() => setAgreed((v) => !v)}>{t("authAgreePrefix")}</Text>
-                    <Text
-                      onPress={() => router.push("/legal?tab=terms")}
-                      style={{ color: colors.brand, fontWeight: "700", textDecorationLine: "underline" }}
-                    >
-                      {t("authTermsLink")}
-                    </Text>
-                    <Text onPress={() => setAgreed((v) => !v)}>{t("authAgreeAnd")}</Text>
-                    <Text
-                      onPress={() => router.push("/legal?tab=privacy")}
-                      style={{ color: colors.brand, fontWeight: "700", textDecorationLine: "underline" }}
-                    >
-                      {t("authPrivacyLink")}
-                    </Text>
-                  </Text>
-                </View>
-                {liveErrors.terms ? (
-                  <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{liveErrors.terms}</Text>
-                ) : null}
-              </View>
-
-              <FormError message={formError} />
-              <Button title={t("provRegCta")} onPress={submit} loading={loading} />
-
-              <View
-                style={{
-                  ...ROW,
-                  gap: spacing.sm,
-                  backgroundColor: colors.brandTint,
-                  borderRadius: radius.md,
-                  padding: spacing.md,
+            {/* the login number, derived and read-only */}
+            <View pointerEvents="none">
+              <IconInput
+                label={t("provNoLabel")}
+                icon="keypad-outline"
+                editable={false}
+                value={previewNo}
+                placeholder={t("provNoPlaceholder")}
+                hint={t("provNoHint")}
+                showSoftInputOnFocus={false}
+                inputStyle={{
+                  textAlign: "center",
+                  writingDirection: "ltr",
+                  fontSize: previewNo ? 18 : 14,
+                  fontWeight: previewNo ? "800" : "400",
+                  color: previewNo ? colors.brandDark : colors.faint,
+                  // spacing the digits helps them read as a code, but it would
+                  // tear the placeholder sentence apart
+                  letterSpacing: previewNo ? 6 : 0,
                 }}
-              >
-                <Ionicons name="information-circle-outline" size={18} color={colors.brand} />
-                <Text style={[RTL_TEXT, { flex: 1, color: colors.text, fontSize: 12.5, lineHeight: 19 }]}>
-                  {t("provSameHoneNote")}
+              />
+            </View>
+
+            <PasswordField
+              label={t("authPassword")}
+              value={password}
+              onChangeText={setPassword}
+              error={liveErrors.password}
+              placeholder={t("authPasswordPh")}
+            />
+            <PasswordField
+              label={t("authConfirmPassword")}
+              value={confirm}
+              onChangeText={setConfirm}
+              error={liveErrors.confirm}
+            />
+
+            {/* terms */}
+            <View style={{ gap: 6 }}>
+              <View style={{ ...ROW, gap: spacing.sm, alignItems: "flex-start" }}>
+                <Pressable
+                  onPress={() => setAgreed((v) => !v)}
+                  hitSlop={10}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: agreed }}
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 8,
+                    borderWidth: 1.5,
+                    borderColor: agreed ? colors.brand : termsInvalid ? colors.danger : colors.border,
+                    backgroundColor: agreed ? colors.brand : colors.card,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginTop: 1,
+                  }}
+                >
+                  {agreed ? <Ionicons name="checkmark" size={16} color={colors.onBrand} /> : null}
+                </Pressable>
+                <Text style={[RTL_TEXT, { flex: 1, color: colors.muted, fontSize: 13.5, lineHeight: 21 }]}>
+                  <Text onPress={() => setAgreed((v) => !v)}>{t("authAgreePrefix")}</Text>
+                  <Text
+                    onPress={() => router.push("/legal?tab=terms")}
+                    style={{ color: colors.brand, fontWeight: "700", textDecorationLine: "underline" }}
+                  >
+                    {t("authTermsLink")}
+                  </Text>
+                  <Text onPress={() => setAgreed((v) => !v)}>{t("authAgreeAnd")}</Text>
+                  <Text
+                    onPress={() => router.push("/legal?tab=privacy")}
+                    style={{ color: colors.brand, fontWeight: "700", textDecorationLine: "underline" }}
+                  >
+                    {t("authPrivacyLink")}
+                  </Text>
                 </Text>
               </View>
+              {liveErrors.terms ? (
+                <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{liveErrors.terms}</Text>
+              ) : null}
+            </View>
 
-              <Pressable
-                onPress={() => router.replace("/(auth)/sign-in")}
-                style={({ pressed }) => ({ alignItems: "center", opacity: pressed ? 0.7 : 1 })}
-              >
-                <Text style={{ color: colors.brand, fontSize: 14, fontWeight: "700" }}>{t("authGoSignIn")}</Text>
-              </Pressable>
+            <FormError message={formError} />
+            <AuthCta title={t("provRegCta")} onPress={submit} loading={loading} />
+
+            <View
+              style={{
+                ...ROW,
+                gap: spacing.sm,
+                alignItems: "flex-start",
+                backgroundColor: colors.brandTint,
+                borderRadius: radius.md,
+                padding: spacing.md,
+              }}
+            >
+              <Ionicons name="information-circle-outline" size={18} color={colors.brand} />
+              <Text style={[RTL_TEXT, { flex: 1, color: colors.text, fontSize: 12.5, lineHeight: 19 }]}>
+                {t("provSameHoneNote")}
+              </Text>
             </View>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+
+          <View style={{ marginTop: spacing.lg }}>
+            <AuthLink
+              label={t("authGoSignIn")}
+              onPress={() => router.replace("/(auth)/sign-in-provider")}
+            />
+          </View>
+        </AuthSheet>
+      </AuthScreen>
 
       {/* success — the login number is the whole point of this screen */}
       <Modal visible={!!issuedNo} transparent animationType="fade" onRequestClose={enterApp}>
@@ -412,7 +320,7 @@ export default function RegisterProvider() {
                 justifyContent: "center",
               }}
             >
-              <Ionicons name="checkmark" size={34} color="#fff" />
+              <Ionicons name="checkmark" size={34} color={colors.onBrand} />
             </View>
             <Text style={{ color: colors.text, fontSize: 18, fontWeight: "800", textAlign: "center" }}>
               {t("provSuccessTitle")}
