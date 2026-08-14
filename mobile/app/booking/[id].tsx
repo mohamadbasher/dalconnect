@@ -490,22 +490,7 @@ export default function BookingDetail() {
   // Badge tones and StatusPill tones agree everywhere except "gold", which the
   // pill doesn't have — the warn tint is the same amber.
   const statusTone = STATUS_TONE[booking.status];
-  /**
-   * STATUS_KEY['open'] is the static "ממתין להצעות" (waiting for offers) label —
-   * correct for a request with nothing back yet, but it does not know about
-   * offers, and once real quotes arrive it sits directly under a tracker that
-   * has just marked "הצעות" as the current step. Reused for both: same amber
-   * "waiting" pill and a bold "offers" milestone, side by side, saying opposite
-   * things. Swap to a success-toned, count-bearing label the moment there's
-   * something to look at — the pill should describe what's actually true.
-   */
-  const hasPendingOffers = booking.status === "open" && pendingOffers.length > 0;
-  const pillLabel = hasPendingOffers
-    ? pendingOffers.length === 1
-      ? t("statusOffersReadyOne")
-      : t("statusOffersReady", { n: pendingOffers.length })
-    : t(STATUS_KEY[booking.status]);
-  const pillTone = hasPendingOffers ? "success" : statusTone === "gold" ? "warn" : statusTone;
+  const pillTone = statusTone === "gold" ? "warn" : statusTone;
   // The customer's own words + photos sit above a hairline; the logistics
   // (where, when, how much) sit below it. No words, no rule.
   const hasJobBody = Boolean(booking.description || booking.photos.length > 0);
@@ -585,7 +570,7 @@ export default function BookingDetail() {
             <View style={{ gap: 10 }}>
               <View style={{ ...ROW }}>
                 <StatusPill
-                  label={pillLabel}
+                  label={t(STATUS_KEY[booking.status])}
                   tone={pillTone}
                   glow={booking.status === "open" || booking.status === "in_progress"}
                 />
