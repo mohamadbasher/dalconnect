@@ -31,7 +31,11 @@
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#c25d27"
       },
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"],
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "blockedPermissions": ["android.permission.RECORD_AUDIO"],
       "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
@@ -56,6 +60,13 @@
     ],
     "experiments": {
       "typedRoutes": false
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "62870af0-3dac-4ecd-9643-38441a0046fc"
+      }
+    },
+    "owner": "muhammadbasheer"
   }
 }
