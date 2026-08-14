@@ -22,7 +22,14 @@ docs/       AGENT_BRIEF.md — internal conventions & foundation API reference
 Customers **do not browse a directory of professionals**. There is no pro search.
 The whole product is one flow:
 
-1. **Pick a service.** Home is a grid of trades (electrician, plumber, AC…).
+1. **Pick a service.** Home leads with the **most-requested** trades (electrician,
+   plumber, AC…) and puts the remaining categories one tap away, on `/search` — 32
+   tiles at once was a wall of choice. Which trades lead is **data, not code**:
+   `categories.is_popular` / `popular_sort`, editable from the admin
+   `/categories` page, so the home screen can be re-curated without an app
+   release. The app falls back to a built-in list if nothing is flagged, and the
+   grid is 4 tiles per row — a count that isn't a multiple of 4 leaves a ragged
+   last row.
 2. **Describe the job** — problem, photos, location — and choose **urgency**:
    `same_day` (costs the customer more) or `scheduled` (next day or later, with a
    preferred date/time).

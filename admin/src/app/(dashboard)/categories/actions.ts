@@ -25,13 +25,43 @@ export async function updateCategory(formData: FormData): Promise<void> {
   const name_he = String(formData.get("name_he") ?? "").trim();
   const icon = String(formData.get("icon") ?? "").trim() || "tools";
   const sort_order = Number(formData.get("sort_order") ?? 0) || 0;
+  const popular_sort = Number(formData.get("popular_sort") ?? 0) || 0;
   if (!id || !name_ar || !name_he) return;
 
   const db = createAdminClient();
   await db
     .from("categories")
-    .update({ name_ar, name_he, icon, sort_order })
+    .update({ name_ar, name_he, icon, sort_order, popular_sort })
     .eq("id", id);
+  revalidatePath("/categories");
+}
+
+/**
+ * Add/remove a category from the home screen's "most requested" grid.
+ *
+ * On add it takes the next free slot rather than 0, so a newly featured
+ * category lands at the end instead of silently tying with whatever already
+ * sits at 0 — ties would order arbitrarily and the home screen would shuffle.
+ */
+export async function togglePopular(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = Number(formData.get("id") ?? 0);
+  const popular = String(formData.get("is_popular") ?? "") === "true";
+  if (!id) return;
+
+  const db = createAdminClient();
+  if (popular) {
+    await db.from("categories").update({ is_popular: false, popular_sort: 0 }).eq("id", id);
+  } else {
+    const { data } = await db
+      .from("categories")
+      .select("popular_sort")
+      .eq("is_popular", true)
+      .order("popular_sort", { ascending: false })
+      .limit(1);
+    const next = (data?.[0]?.popular_sort ?? 0) + 1;
+    await db.from("categories").update({ is_popular: true, popular_sort: next }).eq("id", id);
+  }
   revalidatePath("/categories");
 }
 

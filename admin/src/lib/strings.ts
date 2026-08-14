@@ -176,6 +176,13 @@ export const S = {
   addCategory: "إضافة فئة",
   iconHint: "اسم أيقونة من MaterialCommunityIcons (مثال: lightning-bolt)",
   categoriesEmpty: "لا توجد فئات",
+  colPopular: "الصفحة الرئيسية",
+  popularAdd: "أضف للرئيسية",
+  popularRemove: "أزل من الرئيسية",
+  popularSortHint: "ترتيب الظهور في الرئيسية — احفظ بعد التعديل",
+  popularCountSuffix: "خدمة تظهر في الصفحة الرئيسية",
+  popularRaggedHint: "الشبكة 4 بالصف — العدد من مضاعفات الأربعة (4 أو 8) يعطي صفوفاً كاملة",
+  popularEmptyHint: "ما في خدمات مختارة — التطبيق بيرجع للقائمة الافتراضية",
 
   // cities
   citiesTitle: "المدن",

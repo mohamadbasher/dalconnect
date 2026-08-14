@@ -45,6 +45,9 @@ export type Category = {
   icon: string;
   sort_order: number;
   is_active: boolean;
+  // Leads the customer home screen ("most requested"), in popular_sort order.
+  is_popular: boolean;
+  popular_sort: number;
 };
 
 export type Banner = {
