@@ -77,6 +77,18 @@ export const booking: Dict = {
   chooseHour: { ar: "اختر الساعة", he: "בחרו שעה" },
   scheduleSummary: { ar: "موعدك: {date} الساعة {time}", he: "המועד שלכם: {date} בשעה {time}" },
   submitBooking: { ar: "إرسال الطلب", he: "שליחת הבקשה" },
+  editBooking: { ar: "تعديل الطلب", he: "עריכת הבקשה" },
+  editBookingSubtitle: {
+    ar: "بتقدر تعدّل التفاصيل ما دام ما اخترت مهني",
+    he: "אפשר לעדכן את הפרטים כל עוד לא נבחר בעל מקצוע",
+  },
+  saveChanges: { ar: "حفظ التعديلات", he: "שמירת השינויים" },
+  editLockedNote: {
+    ar: "الخدمة والتوقيت ما بينعدّلوا بعد الإرسال — المهنيين قدّموا عروضهم على أساسهم",
+    he: "השירות והתזמון אינם ניתנים לשינוי לאחר השליחה — בעלי המקצוע הגישו הצעות על בסיסם",
+  },
+  bookingUpdatedToast: { ar: "تم تحديث الطلب", he: "הבקשה עודכנה" },
+  editLoadFailed: { ar: "تعذّر فتح الطلب للتعديل", he: "לא הצלחנו לפתוח את הבקשה לעריכה" },
   uploadingPhotos: { ar: "جاري رفع الصور… {n}/{total}", he: "מעלים תמונות… {n}/{total}" },
 
   // ----- toasts -----
@@ -104,14 +116,23 @@ export const booking: Dict = {
   bookingNotFound: { ar: "الطلب غير موجود", he: "ההזמנה לא נמצאה" },
   /** compact tracker: what happens after the current step */
   stepNext: { ar: "الخطوة التالية: {step}", he: "השלב הבא: {step}" },
+  // Milestones for the tracker rail. Short by necessity — five sit side by side
+  // across a phone. These name the JOURNEY; STATUS_KEY names the current state.
+  trackSent: { ar: "انبعث", he: "נשלחה" },
+  trackOffers: { ar: "عروض", he: "הצעות" },
+  trackChosen: { ar: "اخترت", he: "נבחר" },
+  trackWorking: { ar: "بالتنفيذ", he: "בביצוע" },
+  trackDone: { ar: "اكتمل", he: "הושלם" },
   waitingOffersTitle: { ar: "بانتظار العروض…", he: "ממתינים להצעות…" },
   waitingOffersSubtitle: {
     ar: "أرسلنا طلبك للمهنيين القريبين منك، ستظهر العروض هنا فور وصولها",
     he: "שלחנו את הבקשה לבעלי מקצוע באזורכם, ההצעות יופיעו כאן ברגע שיגיעו",
   },
+  // No timing promise. We have no data behind "usually within minutes", and it
+  // is a promise made on behalf of people who haven't agreed to it.
   notifyProsHint: {
-    ar: "أبلغنا المهنيين المناسبين في منطقتك — عادةً يصل أول عرض خلال دقائق",
-    he: "עדכנו את בעלי המקצוע המתאימים באזורכם — בדרך כלל ההצעה הראשונה מגיעה תוך דקות",
+    ar: "أبلغنا المهنيين المناسبين في منطقتك — منخبّرك فور وصول عرض جديد",
+    he: "עדכנו את בעלי המקצוע המתאימים באזורכם — נעדכן אתכם ברגע שתתקבל הצעה",
   },
   proSectionTitle: { ar: "المهني", he: "בעל המקצוע" },
 

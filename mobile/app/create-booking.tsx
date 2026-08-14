@@ -38,6 +38,7 @@ import {
   Badge,
   Button,
   Chip,
+  InlineNote,
   Input,
   Loading,
   SearchBar,
@@ -46,7 +47,7 @@ import {
 } from "../components/ui";
 import { CalendarModal } from "../components/CalendarModal";
 import { useToast } from "../components/Toast";
-import type { BookingUrgency, Category, City } from "../lib/types";
+import type { Booking, BookingUrgency, Category, City } from "../lib/types";
 
 const MAX_PHOTOS = 4;
 
@@ -68,8 +69,17 @@ export default function CreateBooking() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   // `description` arrives pre-filled from the quick-request flow, where the
-  // customer has already typed the problem out once.
-  const params = useLocalSearchParams<{ categoryId?: string; description?: string }>();
+  // customer has already typed the problem out once. `editId` turns this whole
+  // screen into the edit form for an existing open request — the fields are the
+  // same ones, so duplicating them into a second screen would only mean two
+  // places to fix every future bug.
+  const params = useLocalSearchParams<{
+    categoryId?: string;
+    description?: string;
+    editId?: string;
+  }>();
+  const editId = params.editId ?? null;
+  const isEdit = editId !== null;
 
   // reference data
   const [categories, setCategories] = useState<Category[] | null>(null);
@@ -138,12 +148,49 @@ export default function CreateBooking() {
     })();
   }, []);
 
-  // prefill the city from the customer's profile while none is chosen
+  // prefill the city from the customer's profile while none is chosen (never in
+  // edit mode — the request already carries its own answer)
   useEffect(() => {
+    if (isEdit) return;
     if (cityId === null && profile?.city_id != null && cities.some((c) => c.id === profile.city_id)) {
       setCityId(profile.city_id);
     }
-  }, [cityId, profile?.city_id, cities]);
+  }, [isEdit, cityId, profile?.city_id, cities]);
+
+  // ---- edit mode: load the request we're editing ----
+  const [loadingEdit, setLoadingEdit] = useState(isEdit);
+  useEffect(() => {
+    if (!editId) return;
+    (async () => {
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("*")
+        .eq("id", editId)
+        .single();
+      if (error || !data) {
+        toast.error(t("editLoadFailed"));
+        router.back();
+        return;
+      }
+      const b = data as Booking;
+      setCategoryId(b.category_id);
+      setTitle(b.title ?? "");
+      setDescription(b.description ?? "");
+      setPhotos(b.photos ?? []);
+      setCityId(b.city_id);
+      setAddress(b.address ?? "");
+      setUrgency(b.urgency);
+      if (b.lat != null && b.lng != null) setCoords({ lat: b.lat, lng: b.lng });
+      if (b.scheduled_at) {
+        const at = new Date(b.scheduled_at);
+        setPickedDate(at);
+        setPickedSlot(`${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`);
+      }
+      setLoadingEdit(false);
+    })();
+    // one-shot prefill; re-running would stomp on what the customer is typing
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId]);
 
   /** scheduled means "tomorrow or later" — today belongs to the same-day option */
   const tomorrowStart = useMemo(() => {
@@ -281,15 +328,25 @@ export default function CreateBooking() {
 
     setSubmitting(true);
     try {
+      // In edit mode `photos` mixes already-uploaded URLs with newly picked
+      // local URIs. Re-uploading the former would burn bandwidth and orphan the
+      // originals, so only the local ones go up.
+      const pending = photos.filter((p) => !/^https?:\/\//.test(p));
       const photoUrls: string[] = [];
-      for (let i = 0; i < photos.length; i++) {
-        setUploadProgress({ n: i + 1, total: photos.length });
+      let n = 0;
+      for (const p of photos) {
+        if (/^https?:\/\//.test(p)) {
+          photoUrls.push(p);
+          continue;
+        }
+        n += 1;
+        setUploadProgress({ n, total: pending.length });
         photoUrls.push(
           await uploadImage({
             bucket: "booking-photos",
             userId: uid,
-            localUri: photos[i],
-            fileName: `${Date.now()}_${i}.jpg`,
+            localUri: p,
+            fileName: `${Date.now()}_${n}.jpg`,
           })
         );
       }
@@ -298,6 +355,31 @@ export default function CreateBooking() {
       if (urgency === "scheduled" && pickedDate !== null && pickedSlot !== null) {
         scheduledAt = composeAt(pickedDate, pickedSlot).toISOString();
       }
+
+      // ---- editing an existing open request ----
+      // Only the columns the DB guard allows a customer to touch; the trade,
+      // the urgency, the money and the assignment are all fixed at creation.
+      if (editId) {
+        const { error: upErr } = await supabase
+          .from("bookings")
+          .update({
+            title: title.trim(),
+            description: description.trim(),
+            photos: photoUrls,
+            city_id: cityId,
+            address: address.trim(),
+            lat: coords?.lat ?? null,
+            lng: coords?.lng ?? null,
+            scheduled_at: scheduledAt,
+          })
+          .eq("id", editId)
+          .eq("status", "open"); // a quote may have been accepted while we edited
+        if (upErr) throw upErr;
+        toast.success(t("bookingUpdatedToast"));
+        router.back();
+        return;
+      }
+
       const { data, error } = await supabase
         .from("bookings")
         .insert({
@@ -331,7 +413,11 @@ export default function CreateBooking() {
   };
 
   if (!session) return <Redirect href="/(auth)/welcome" />;
-  if (categories === null) return <Loading />;
+  if (categories === null || loadingEdit) return <Loading />;
+
+  // Editing a same-day job leaves step 2 with nothing in it — the urgency is
+  // locked and there is no date to pick — so it drops out and "where" becomes 2.
+  const showWhenStep = !isEdit || urgency === "scheduled";
 
   /** the two urgency choices — the visual centrepiece of the form */
   const urgencyCard = (
@@ -502,10 +588,10 @@ export default function CreateBooking() {
         </Pressable>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={[RTL_TEXT, { color: colors.text, fontSize: 18, fontWeight: "800" }]}>
-            {t("newBooking")}
+            {isEdit ? t("editBooking") : t("newBooking")}
           </Text>
           <Text numberOfLines={2} style={[RTL_TEXT, { color: colors.muted, fontSize: 12, lineHeight: 17 }]}>
-            {t("newBookingSubtitle")}
+            {isEdit ? t("editBookingSubtitle") : t("newBookingSubtitle")}
           </Text>
         </View>
       </View>
@@ -524,7 +610,8 @@ export default function CreateBooking() {
               tapping a trade; re-offering 31 alternatives invites second-guessing
               a decision they already made. One line, one way out. */}
           <Pressable
-            onPress={() => setCatModal(true)}
+            onPress={() => (isEdit ? null : setCatModal(true))}
+            disabled={isEdit}
             style={({ pressed }) => [
               {
                 ...ROW,
@@ -537,7 +624,7 @@ export default function CreateBooking() {
                 padding: spacing.md,
                 ...shadows.card,
               },
-              pressed ? pressCard : null,
+              pressed && !isEdit ? pressCard : null,
             ]}
           >
             <View
@@ -572,14 +659,24 @@ export default function CreateBooking() {
             >
               {selectedCategory ? loc(selectedCategory, "name") : t("chooseCategory")}
             </Text>
-            <View style={{ ...ROW, alignItems: "center", gap: 2 }}>
-              <Text style={{ color: colors.brand, fontSize: 13.5, fontWeight: "700" }}>
-                {t("changeCategory")}
-              </Text>
-              <Ionicons name="chevron-back" size={14} color={colors.brand} />
-            </View>
+            {isEdit ? (
+              <Ionicons name="lock-closed-outline" size={16} color={colors.faint} />
+            ) : (
+              <View style={{ ...ROW, alignItems: "center", gap: 2 }}>
+                <Text style={{ color: colors.brand, fontSize: 13.5, fontWeight: "700" }}>
+                  {t("changeCategory")}
+                </Text>
+                <Ionicons name="chevron-back" size={14} color={colors.brand} />
+              </View>
+            )}
           </Pressable>
           {fieldError(errors.category)}
+
+          {/* say why the two locked fields are locked, rather than leaving the
+              customer to wonder whether it's a bug */}
+          {isEdit ? (
+            <InlineNote tone="info" icon="information-outline" text={t("editLockedNote")} />
+          ) : null}
 
           {/* 1 — the problem, with photos folded in: they describe the same thing */}
           {stepCard(
@@ -684,13 +781,22 @@ export default function CreateBooking() {
           )}
 
           {/* 2 — when. The date/time fields stay hidden until "later" is picked,
-                 so the common case (today) never shows an empty calendar. */}
-          {stepCard(
+                 so the common case (today) never shows an empty calendar.
+                 Editing a same-day job leaves nothing here to change, so the
+                 whole card goes rather than sitting empty. */}
+          {showWhenStep ? stepCard(
             <>
               {stepHeader(2, t("urgencyTitle"))}
-              {urgencyCard("same_day", "flash", "urgencySameDay", "urgencySameDaySub")}
-              {urgencyCard("scheduled", "calendar-clock", "urgencyScheduled", "urgencyScheduledSub")}
-              {fieldError(errors.urgency)}
+              {/* Editing can't change the urgency (the request fee was stamped
+                  from it), but a scheduled job's date is exactly the kind of
+                  thing people come back to fix — so the picker below stays. */}
+              {isEdit ? null : (
+                <>
+                  {urgencyCard("same_day", "flash", "urgencySameDay", "urgencySameDaySub")}
+                  {urgencyCard("scheduled", "calendar-clock", "urgencyScheduled", "urgencyScheduledSub")}
+                  {fieldError(errors.urgency)}
+                </>
+              )}
 
             {urgency === "scheduled" ? (
               <View style={{ gap: spacing.md, marginTop: spacing.xs }}>
@@ -749,13 +855,13 @@ export default function CreateBooking() {
                 </View>
               ) : null}
             </>
-          )}
+          ) : null}
 
           {/* 3 — where. One tap should finish this step: the GPS button pins the
                  map AND picks the city, which is what actually routes the job. */}
           {stepCard(
             <>
-              {stepHeader(3, t("stepWhere"))}
+              {stepHeader(showWhenStep ? 3 : 2, t("stepWhere"))}
 
               <Pressable
                 onPress={useMyLocation}
@@ -862,7 +968,11 @@ export default function CreateBooking() {
               numberOfLines={2}
               style={[RTL_TEXT, { flex: 1, color: colors.muted, fontSize: 11.5, lineHeight: 16 }]}
             >
-              {canSubmit ? t("afterSubmitNote") : t("submitMissing", { what: missing.join(" · ") })}
+              {!canSubmit
+                ? t("submitMissing", { what: missing.join(" · ") })
+                : isEdit
+                  ? t("editBookingSubtitle")
+                  : t("afterSubmitNote")}
             </Text>
           </View>
 
@@ -870,7 +980,9 @@ export default function CreateBooking() {
             title={
               uploadProgress
                 ? t("uploadingPhotos", { n: uploadProgress.n, total: uploadProgress.total })
-                : t("submitBooking")
+                : isEdit
+                  ? t("saveChanges")
+                  : t("submitBooking")
             }
             onPress={submit}
             loading={submitting && uploadProgress === null}

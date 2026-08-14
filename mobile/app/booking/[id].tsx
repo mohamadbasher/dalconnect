@@ -67,15 +67,30 @@ const CANCEL_LOCKED: BookingStatus[] = ["on_the_way", "in_progress", "completed"
  */
 const CONTACT_UNLOCKED: BookingStatus[] = ["accepted", "on_the_way", "in_progress", "completed", "rated"];
 
-function stepIndex(status: BookingStatus): number {
+/**
+ * The five milestones of a request, right to left. These name the JOURNEY —
+ * where the customer is and what comes next — which is what "1/5" left them to
+ * guess. STATUS_KEY still names the current state, shown in the pill above.
+ */
+const TRACK_STEPS = ["trackSent", "trackOffers", "trackChosen", "trackWorking", "trackDone"] as const;
+
+/**
+ * Which milestone the request is standing on.
+ *
+ * "Offers" is the one milestone a status alone can't tell you: an open request
+ * with nothing in it is still at "sent", and the same status with three quotes
+ * waiting has genuinely moved on. Hence the count.
+ */
+function trackIndex(status: BookingStatus, offerCount: number): number {
   switch (status) {
     case "open":
+      return offerCount > 0 ? 1 : 0;
     case "pending":
-      return 0;
-    case "accepted":
+      // direct booking — no quoting round, waiting on one professional
       return 1;
-    case "on_the_way":
+    case "accepted":
       return 2;
+    case "on_the_way":
     case "in_progress":
       return 3;
     case "completed":
@@ -127,12 +142,15 @@ function QuietAction({
   color,
   onPress,
   disabled,
+  small,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   color: string;
   onPress: () => void;
   disabled?: boolean;
+  /** tertiary weight — for actions that shouldn't read as peers of cancelling */
+  small?: boolean;
 }) {
   return (
     <Pressable
@@ -141,14 +159,14 @@ function QuietAction({
       hitSlop={8}
       style={({ pressed }) => ({
         ...ROW,
-        gap: 7,
+        gap: small ? 5 : 7,
         justifyContent: "center",
-        paddingVertical: 10,
+        paddingVertical: small ? 6 : 10,
         opacity: disabled ? 0.4 : pressed ? 0.6 : 1,
       })}
     >
-      <Ionicons name={icon} size={16} color={color} />
-      <Text style={{ color, fontSize: 14, fontWeight: "700" }}>{label}</Text>
+      <Ionicons name={icon} size={small ? 13 : 16} color={color} />
+      <Text style={{ color, fontSize: small ? 12 : 14, fontWeight: small ? "600" : "700" }}>{label}</Text>
     </Pressable>
   );
 }
@@ -364,13 +382,6 @@ export default function BookingDetail() {
     }
   };
 
-  const steps = useMemo(() => {
-    if (!booking) return [];
-    const first: BookingStatus = booking.type === "direct" ? "pending" : "open";
-    const list: BookingStatus[] = [first, "accepted", "on_the_way", "in_progress", "completed"];
-    return list;
-  }, [booking]);
-
   if (loading) return <Loading />;
 
   const header = (
@@ -401,7 +412,7 @@ export default function BookingDetail() {
   }
 
   const isTerminated = booking.status === "cancelled" || booking.status === "rejected";
-  const currentIdx = stepIndex(booking.status);
+  const currentIdx = trackIndex(booking.status, pendingOffers.length);
   const pro = booking.professional ?? null;
   const proName = proDisplayName(pro);
   const canCancel = booking.status === "open" || booking.status === "pending" || booking.status === "accepted";
@@ -428,7 +439,6 @@ export default function BookingDetail() {
   // pill doesn't have — the warn tint is the same amber.
   const statusTone = STATUS_TONE[booking.status];
   const pillTone = statusTone === "gold" ? "warn" : statusTone;
-  const nextStep = currentIdx >= 0 && currentIdx + 1 < steps.length ? steps[currentIdx + 1] : null;
   // The customer's own words + photos sit above a hairline; the logistics
   // (where, when, how much) sit below it. No words, no rule.
   const hasJobBody = Boolean(booking.description || booking.photos.length > 0);
@@ -505,37 +515,70 @@ export default function BookingDetail() {
               ) : null}
             </View>
           ) : (
-            /* compact tracker: live status + a five-segment rail that fills
-               from the right — five labelled dots dominated the screen */
-            <View style={{ gap: 9 }}>
-              <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
+            /* Named tracker. "1/5" told the customer they were somewhere in a
+               five-step process without saying what the five steps were, or
+               what step 2 would be. Milestones answer both at a glance. */
+            <View style={{ gap: 10 }}>
+              <View style={{ ...ROW }}>
                 <StatusPill
                   label={t(STATUS_KEY[booking.status])}
                   tone={pillTone}
                   glow={booking.status === "open" || booking.status === "in_progress"}
                 />
-                <Text style={[MONEY_TEXT, { color: colors.faint, fontSize: 12, fontWeight: "700" }]}>
-                  {`${Math.max(currentIdx + 1, 1)}/${steps.length}`}
-                </Text>
               </View>
-              <View style={{ ...ROW, gap: 4 }}>
-                {steps.map((s, i) => (
-                  <View
-                    key={s}
-                    style={{
-                      flex: 1,
-                      height: 5,
-                      borderRadius: radius.full,
-                      backgroundColor: i <= currentIdx ? colors.brand : colors.chip,
-                    }}
-                  />
-                ))}
+
+              {/* row-reverse: the journey runs right to left */}
+              <View style={{ ...ROW, alignItems: "flex-start" }}>
+                {TRACK_STEPS.map((key, i) => {
+                  const done = i < currentIdx;
+                  const current = i === currentIdx;
+                  const last = i === TRACK_STEPS.length - 1;
+                  // Inside each step the row is NOT reversed, so "start" is the
+                  // visual left — which points at the NEXT milestone.
+                  const line = (visible: boolean, filled: boolean) => (
+                    <View
+                      style={{
+                        flex: 1,
+                        height: 2,
+                        backgroundColor: visible ? (filled ? colors.brand : colors.chip) : "transparent",
+                      }}
+                    />
+                  );
+                  return (
+                    <View key={key} style={{ flex: 1, alignItems: "center", gap: 6 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", width: "100%" }}>
+                        {line(!last, done)}
+                        <View
+                          style={{
+                            width: current ? 18 : 14,
+                            height: current ? 18 : 14,
+                            borderRadius: radius.full,
+                            backgroundColor: done || current ? colors.brand : colors.chip,
+                            borderWidth: current ? 3 : 0,
+                            borderColor: colors.brandTint,
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          {done ? <Ionicons name="checkmark" size={9} color={colors.onBrand} /> : null}
+                        </View>
+                        {line(i > 0, i <= currentIdx)}
+                      </View>
+                      <Text
+                        numberOfLines={1}
+                        style={{
+                          color: done || current ? colors.text : colors.faint,
+                          fontSize: 10.5,
+                          fontWeight: current ? "800" : "600",
+                          textAlign: "center",
+                        }}
+                      >
+                        {t(key)}
+                      </Text>
+                    </View>
+                  );
+                })}
               </View>
-              {nextStep ? (
-                <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12 }]}>
-                  {t("stepNext", { step: t(STATUS_KEY[nextStep]) })}
-                </Text>
-              ) : null}
             </View>
           )}
         </Card>
@@ -955,6 +998,17 @@ export default function BookingDetail() {
             </Pressable>
           ) : null}
 
+          {/* Editing is only honest while the request is still open: once a quote
+              is accepted, the professional priced the job as it was written. */}
+          {booking.status === "open" ? (
+            <QuietAction
+              icon="create-outline"
+              label={t("editBooking")}
+              color={colors.brand}
+              onPress={() => router.push(`/create-booking?editId=${booking.id}` as never)}
+            />
+          ) : null}
+
           {canCancel ? (
             <QuietAction
               icon="close-circle-outline"
@@ -963,10 +1017,16 @@ export default function BookingDetail() {
               onPress={() => setCancelVisible(true)}
             />
           ) : null}
+
+          {/* Reporting sits below the rule and at tertiary weight. It was reading
+              as the peer of cancelling, and while a request is still collecting
+              quotes there is no professional to report anything about. */}
+          <View style={{ height: 1, backgroundColor: colors.hairline, marginTop: 4 }} />
           <QuietAction
+            small
             icon="alert-circle-outline"
             label={t("reportProblem")}
-            color={colors.muted}
+            color={colors.faint}
             onPress={() =>
               router.push(
                 (`/report?bookingId=${booking.id}` +

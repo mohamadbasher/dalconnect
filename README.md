@@ -157,6 +157,20 @@ never from browsing.
     8s timeout) silently falls back to keywords — verified in the same test — so the
     customer always gets an answer. **Editing the keyword table? Run
     `node scripts/test-suggest.mjs` after.**
+15. **RLS controls rows, not columns — `bookings` needs its trigger.** Verified on
+    the live database: with `bookings_update_parties` alone, a signed-in customer
+    could run `update bookings set status='completed', final_price=0, commission=0`
+    on their own row and close their own job for free. Migration
+    `20260714000008_booking_edit_guard.sql` adds `guard_booking_update`, which is
+    what makes customer-side editing safe at all. Two things about it are
+    load-bearing: the trigger is named **`a_guard_booking_update_trigger`** because
+    Postgres fires BEFORE triggers in name order and it must run before
+    `booking_completion_trigger` (which computes `commission`, and would otherwise
+    look like the professional had typed it); and trusted `SECURITY DEFINER` RPCs
+    call `trusted_write_on()` first, because `auth.uid()` inside them is still the
+    caller. **If you add an RPC that writes to `bookings`, call `trusted_write_on()`
+    or it will be rejected.** Guarded by `scripts/test-booking-guard.mjs` and
+    `scripts/test-booking-edit.mjs` (run both from `mobile/`).
 
 ---
 
@@ -220,6 +234,9 @@ not part of the app runtime:
 - `test-suggest.mjs` — the one that needs **no** backend: compiles `lib/suggest.ts` and
   runs real customer phrasings (both languages) through the quick-request matcher, plus
   every AI failure mode. Run it after touching the keyword table.
+- `test-booking-guard.mjs` / `test-booking-edit.mjs` — column-level permissions on
+  `bookings` (see note #15) and the customer edit flow end to end. **Run these from
+  `mobile/`** — they import `@supabase/supabase-js` and sign in as the demo customer.
 
 ## v1 limitations / known gaps
 
