@@ -141,18 +141,20 @@ export default function RegisterProvider() {
         <AuthSheet>
           <View style={{ gap: 14 }}>
             <IconInput
+              key="prov-name"
               label={t("authFullName")}
               icon="person-outline"
-              value={fullName}
+              defaultValue={fullName}
               onChangeText={setFullName}
               error={liveErrors.fullName}
               placeholder={t("authFullNamePh")}
               autoCapitalize="words"
             />
             <IconInput
+              key="prov-biz"
               label={t("provBusinessName")}
               icon="briefcase-outline"
-              value={businessName}
+              defaultValue={businessName}
               onChangeText={setBusinessName}
               error={liveErrors.businessName}
               placeholder={t("provBusinessNamePh")}

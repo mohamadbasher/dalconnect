@@ -669,12 +669,13 @@ export function FieldCard({
             style={[
               RTL_INPUT,
               {
-                height: 26,
+                minHeight: 26,
                 fontSize: 16,
                 color: colors.text,
                 paddingVertical: 0,
                 paddingHorizontal: 0,
                 includeFontPadding: false,
+                textAlignVertical: "center",
               },
               inputStyle,
             ]}

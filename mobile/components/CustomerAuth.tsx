@@ -225,6 +225,7 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
           {signingIn ? (
             <>
               <FieldCard
+                key="signin-phone"
                 label={t("authPhone")}
                 icon="call-outline"
                 value={identifier}
@@ -240,6 +241,7 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
                 inputStyle={{ textAlign: "right", writingDirection: "ltr" }}
               />
               <PasswordCard
+                key="signin-pass"
                 label={t("authPassword")}
                 value={password}
                 onChangeText={setPassword}
@@ -268,16 +270,24 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
             </>
           ) : (
             <>
+              {/* UNCONTROLLED on purpose. The sign-in tab's phone field occupies
+                  this same tree position, so React reuses one native input for
+                  both; as a controlled field the stale instance kept reverting
+                  every keystroke to "" — typing showed nothing. `key` forces a
+                  fresh input per tab, and `defaultValue` lets the native widget
+                  own the text, so what you type is always what you see. */}
               <FieldCard
+                key="signup-name"
                 label={t("authFullName")}
                 icon="person-outline"
-                value={fullName}
+                defaultValue={fullName}
                 onChangeText={setFullName}
                 error={liveUpErrors.fullName}
                 placeholder={t("authFullNamePh")}
                 autoCapitalize="words"
               />
               <FieldCard
+                key="signup-phone"
                 label={t("authPhone")}
                 icon="call-outline"
                 value={phone}
@@ -292,6 +302,7 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
                 inputStyle={{ textAlign: "right", writingDirection: "ltr" }}
               />
               <PasswordCard
+                key="signup-pass"
                 label={t("authPassword")}
                 value={password}
                 onChangeText={setPassword}
@@ -299,6 +310,7 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
                 placeholder={t("authPasswordPh")}
               />
               <PasswordCard
+                key="signup-pass2"
                 label={t("authConfirmPassword")}
                 value={confirm}
                 onChangeText={setConfirm}
