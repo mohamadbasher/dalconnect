@@ -17,7 +17,12 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.dalconnect.app",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "DalConnect uses your location to find professionals near you and share your address for bookings."
+        "NSLocationWhenInUseUsageDescription": "DalConnect uses your location to find professionals near you and share your address for bookings.",
+        "NSPhotoLibraryUsageDescription": "DalConnect needs photo access so you can attach pictures of the job to your request and to chat.",
+        "NSPhotoLibraryAddUsageDescription": "DalConnect saves photos you download from a chat to your library.",
+        "NSCameraUsageDescription": "DalConnect uses the camera so you can photograph the job you need done.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleAllowMixedLocalizations": true
       }
     },
     "android": {
