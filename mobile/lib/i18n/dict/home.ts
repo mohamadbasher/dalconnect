@@ -11,6 +11,8 @@ export const home: Dict = {
     he: "בחרו שירות ונעביר את הבקשה לכל בעלי המקצוע באזורכם",
   },
   homeNoServices: { ar: "لا توجد خدمات متاحة حالياً", he: "אין שירותים זמינים כרגע" },
+  homePopularTitle: { ar: "الخدمات الأكثر طلباً", he: "השירותים המבוקשים ביותר" },
+  homeAllServices: { ar: "كل الخدمات ({count})", he: "כל השירותים ({count})" },
   homeOffersCount: { ar: "عروض الأسعار: {count}", he: "הצעות מחיר: {count}" },
   homeTrackRequest: { ar: "اضغط لمتابعة طلبك", he: "לחצו למעקב אחרי הבקשה" },
 

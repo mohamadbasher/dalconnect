@@ -23,7 +23,7 @@ import { channelTopic } from "../../lib/realtime";
 import { useTheme, radius, spacing } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
-import { fetchCategories } from "../../lib/refdata";
+import { fetchCategories, popularCategories } from "../../lib/refdata";
 import { STATUS_KEY, STATUS_TONE } from "../../lib/format";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
 import {
@@ -202,6 +202,9 @@ export default function HomeScreen() {
   if (!session) return null; // tabs layout redirects; safety guard
   if (loading) return <SkeletonList count={4} />;
 
+  // the short, curated set that leads the screen
+  const popular = popularCategories(cats);
+
   const tileGap = spacing.md;
   const tileW = (width - spacing.lg * 2 - tileGap * 3) / 4;
   const bannerW = width - spacing.lg * 2;
@@ -301,9 +304,10 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      {/* 4 — the hero: every trade we cover, 4 per row */}
+      {/* 4 — the hero: the most-requested trades, everything else one tap away.
+             Showing all 32 at once was a wall of choice. */}
       <View>
-        <SectionHeader title={t("homeSubtitle")} />
+        <SectionHeader title={t("homePopularTitle")} />
         <Text
           style={[
             RTL_TEXT,
@@ -325,7 +329,7 @@ export default function HomeScreen() {
               rowGap: spacing.lg,
             }}
           >
-            {cats.map((cat) => (
+            {popular.map((cat) => (
               <Pressable
                 key={cat.id}
                 onPress={() => router.push(`/create-booking?categoryId=${cat.id}`)}
@@ -366,6 +370,34 @@ export default function HomeScreen() {
             ))}
           </View>
         )}
+
+        {/* everything we didn't lead with */}
+        {cats.length > popular.length ? (
+          <Pressable
+            onPress={() => router.push("/search")}
+            style={({ pressed }) => [
+              {
+                ...ROW,
+                justifyContent: "center",
+                gap: 8,
+                marginTop: spacing.xl,
+                backgroundColor: colors.card,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: colors.border,
+                paddingVertical: 14,
+                ...shadows.card,
+              },
+              pressed ? pressCard : null,
+            ]}
+          >
+            <MaterialCommunityIcons name="view-grid-outline" size={19} color={colors.brand} />
+            <Text style={{ color: colors.brand, fontSize: 14.5, fontWeight: "800" }}>
+              {t("homeAllServices", { count: cats.length })}
+            </Text>
+            <Ionicons name="chevron-back" size={16} color={colors.brand} />
+          </Pressable>
+        ) : null}
       </View>
     </ScrollView>
   );

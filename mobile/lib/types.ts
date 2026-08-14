@@ -37,6 +37,11 @@ export interface Category {
   icon: string;
   sort_order: number;
   is_active: boolean;
+  /** Leads the customer home screen. Optional: absent until the popular-
+   *  categories migration has been applied, in which case the app falls back
+   *  to POPULAR_FALLBACK in lib/refdata. */
+  is_popular?: boolean;
+  popular_sort?: number;
 }
 
 export interface Profile {
