@@ -25,8 +25,7 @@
   "submit": {
     "production": {
       "ios": {
-        "ascAppId": "SET_BY_EAS_ON_FIRST_SUBMIT",
-        "appleTeamId": "SET_ME"
+        "appleTeamId": "RL4VT7452L"
       }
     }
   }
