@@ -450,10 +450,12 @@ export default function HomeScreen() {
 
       {/* 5 — the live request. It sits last on purpose: someone with a job in
              flight opens the app to check on it, and the tail of the screen is
-             where the eye lands after scrolling past what it already knows. */}
-      {activeBooking ? (
-        <View>
-          <SectionHeader title={t("homeMyRequest")} />
+             where the eye lands after scrolling past what it already knows.
+             The section always renders — the placeholder holds the slot so the
+             page doesn't visibly restructure itself the moment a request lands. */}
+      <View>
+        <SectionHeader title={t("homeMyRequest")} />
+        {activeBooking ? (
           <Pressable
             onPress={() => router.push(`/booking/${activeBooking.id}`)}
             style={({ pressed }) => [
@@ -537,8 +539,51 @@ export default function HomeScreen() {
               </View>
             </View>
           </Pressable>
-        </View>
-      ) : null}
+        ) : (
+          // Deliberately flat — no shadow, no CTA. The real card above lifts off
+          // the page when a request exists, and the helper card already owns the
+          // only button this part of the screen needs.
+          <View
+            style={{
+              alignItems: "center",
+              gap: spacing.sm,
+              backgroundColor: colors.card,
+              borderRadius: radius.lg,
+              borderWidth: 1,
+              borderColor: colors.border,
+              paddingVertical: spacing.xl,
+              paddingHorizontal: spacing.lg,
+            }}
+          >
+            <View
+              style={{
+                width: 54,
+                height: 54,
+                borderRadius: radius.full,
+                backgroundColor: colors.chip,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <MaterialCommunityIcons name="clipboard-text-outline" size={25} color={colors.faint} />
+            </View>
+            <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: "700", textAlign: "center" }}>
+              {t("homeNoRequestTitle")}
+            </Text>
+            <Text
+              style={{
+                color: colors.muted,
+                fontSize: 12.5,
+                lineHeight: 18,
+                textAlign: "center",
+                paddingHorizontal: spacing.md,
+              }}
+            >
+              {t("homeNoRequestSubtitle")}
+            </Text>
+          </View>
+        )}
+      </View>
     </ScrollView>
   );
 }

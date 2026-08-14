@@ -25,6 +25,12 @@ export const home: Dict = {
   homeAiCta: { ar: "ابدأ طلب سريع", he: "התחל בקשה מהירה" },
   homeMyRequest: { ar: "طلبي", he: "הבקשה שלי" },
   homeTrackCta: { ar: "تابع الطلب", he: "מעקב אחרי הבקשה" },
+  // Says what the empty space is *for*, not just that it's empty.
+  homeNoRequestTitle: { ar: "ما في طلبات فعّالة حالياً", he: "אין בקשות פעילות כרגע" },
+  homeNoRequestSubtitle: {
+    ar: "لما تبعث طلب، بتتابعه من هون خطوة بخطوة",
+    he: "כששולחים בקשה, עוקבים אחריה מכאן שלב אחר שלב",
+  },
 
   // ----- quick request (describe the problem -> matching trade) -----
   qrTitle: { ar: "طلب سريع", he: "בקשה מהירה" },
