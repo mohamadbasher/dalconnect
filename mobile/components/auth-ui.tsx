@@ -24,7 +24,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme, radius, spacing, brandGradientProps, brandGradientBrightProps } from "../lib/theme";
-import { ROW, RTL_TEXT } from "../lib/rtl";
+import { ROW, RTL_TEXT, RTL_INPUT } from "../lib/rtl";
 
 /** White-on-brand ink for the hero (see file header). */
 const HERO_INK = "#ffffff";
@@ -292,7 +292,7 @@ export function IconInput({
           placeholderTextColor={colors.faint}
           {...props}
           style={[
-            RTL_TEXT,
+            RTL_INPUT,
             { flex: 1, paddingVertical: 15, fontSize: 15, color: colors.text },
             inputStyle,
             style,
@@ -664,7 +664,7 @@ export function FieldCard({
               placeholderTextColor={colors.faint}
               {...props}
               style={[
-                RTL_TEXT,
+                RTL_INPUT,
                 { flex: 1, fontSize: 16, color: colors.text, padding: 0, minHeight: 24 },
                 inputStyle,
               ]}

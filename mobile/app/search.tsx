@@ -21,7 +21,7 @@ import { useTheme, radius, spacing } from "../lib/theme";
 import { useI18n } from "../lib/i18n";
 import { useAuth } from "../context/AuthContext";
 import { fetchCategories } from "../lib/refdata";
-import { ROW, RTL_TEXT } from "../lib/rtl";
+import { ROW, RTL_TEXT, RTL_INPUT } from "../lib/rtl";
 import { Button, EmptyState, Loading, SheetHandle, SkeletonList, pressCard } from "../components/ui";
 import type { Category } from "../lib/types";
 
@@ -128,7 +128,7 @@ export function PickerSheet({
                 onChangeText={setQ}
                 placeholder={searchPlaceholder}
                 placeholderTextColor={colors.faint}
-                style={[RTL_TEXT, { flex: 1, fontSize: 14, color: colors.text, padding: 0 }]}
+                style={[RTL_INPUT, { flex: 1, fontSize: 14, color: colors.text, padding: 0 }]}
               />
             </View>
           ) : null}
@@ -422,7 +422,7 @@ export default function SearchScreen() {
             placeholderTextColor={colors.faint}
             autoFocus
             returnKeyType="search"
-            style={[RTL_TEXT, { flex: 1, fontSize: 14.5, color: colors.text, padding: 0 }]}
+            style={[RTL_INPUT, { flex: 1, fontSize: 14.5, color: colors.text, padding: 0 }]}
           />
           {q.length > 0 ? (
             <Pressable onPress={() => setQ("")} hitSlop={8}>

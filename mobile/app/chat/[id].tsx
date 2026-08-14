@@ -27,7 +27,7 @@ import { channelTopic } from "../../lib/realtime";
 import { useTheme, radius, spacing } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
-import { ROW, RTL_TEXT } from "../../lib/rtl";
+import { ROW, RTL_TEXT, RTL_INPUT } from "../../lib/rtl";
 import { Avatar, EmptyState, Loading } from "../../components/ui";
 import { formatTime } from "../../lib/format";
 import { uploadImage } from "../../lib/upload";
@@ -633,7 +633,7 @@ export default function ChatThread() {
           placeholderTextColor={colors.faint}
           multiline
           style={[
-            RTL_TEXT,
+            RTL_INPUT,
             {
               flex: 1,
               backgroundColor: colors.bg,

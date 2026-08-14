@@ -14,7 +14,7 @@ import {
 import { Image } from "expo-image";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { useTheme, radius, spacing } from "../lib/theme";
-import { ROW, RTL_TEXT } from "../lib/rtl";
+import { ROW, RTL_TEXT, RTL_INPUT } from "../lib/rtl";
 
 // ---------- Press states (Dal's calibrated values) ----------
 /** Tap feedback for card-sized surfaces: a real, visible push-in. */
@@ -106,7 +106,7 @@ export function Input({
         placeholderTextColor={colors.faint}
         {...props}
         style={[
-          RTL_TEXT,
+          RTL_INPUT,
           {
             backgroundColor: colors.card,
             borderWidth: 1.5,
@@ -454,7 +454,7 @@ export function SearchBar({
         placeholderTextColor={colors.faint}
         returnKeyType="search"
         onSubmitEditing={onSubmit}
-        style={[RTL_TEXT, { flex: 1, fontSize: 14.5, color: colors.text, padding: 0 }]}
+        style={[RTL_INPUT, { flex: 1, fontSize: 14.5, color: colors.text, padding: 0 }]}
       />
     </View>
   );
