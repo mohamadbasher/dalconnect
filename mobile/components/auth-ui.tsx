@@ -489,9 +489,68 @@ export function AuthFooter({
  * the project, so the warmth comes from a gradient instead — same feel, nothing
  * to ship.
  */
-export function AuthHeaderLight({ tagline }: { tagline?: string }) {
+/** One floating trade chip — the little "photo" pieces around the logo. */
+function TradeChip({
+  icon,
+  top,
+  shift,
+  tilt,
+  size = 38,
+  gold,
+}: {
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  top: number;
+  /** horizontal offset from the centre (positive = towards the right) */
+  shift: number;
+  tilt: string;
+  size?: number;
+  gold?: boolean;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        top,
+        alignSelf: "center",
+        width: size,
+        height: size,
+        borderRadius: size / 3,
+        backgroundColor: "#ffffff",
+        alignItems: "center",
+        justifyContent: "center",
+        transform: [{ translateX: shift }, { rotate: tilt }],
+        shadowColor: "#3d2413",
+        shadowOpacity: 0.12,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 5 },
+        elevation: 4,
+        borderWidth: 1,
+        borderColor: "rgba(226,130,68,0.18)",
+      }}
+    >
+      <MaterialCommunityIcons name={icon} size={size * 0.5} color={gold ? colors.gold : colors.brand} />
+    </View>
+  );
+}
+
+export function AuthHeaderLight({
+  tagline,
+  compact,
+  roleChip,
+  onBack,
+}: {
+  tagline?: string;
+  /** Tighter header for secondary screens (provider entrance, registration). */
+  compact?: boolean;
+  /** Small pill under the wordmark naming the area (e.g. the providers' one). */
+  roleChip?: { icon: keyof typeof Ionicons.glyphMap; label: string };
+  onBack?: () => void;
+}) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const tile = compact ? 70 : 88;
   return (
     <LinearGradient
       // warm at the top, resolving to the card colour so the form below reads
@@ -500,12 +559,16 @@ export function AuthHeaderLight({ tagline }: { tagline?: string }) {
       locations={[0, 0.45, 0.78, 1]}
       start={{ x: 0.5, y: 0 }}
       end={{ x: 0.5, y: 1 }}
-      style={{ paddingTop: insets.top + 30, paddingBottom: 30, alignItems: "center", overflow: "hidden" }}
+      style={{
+        paddingTop: insets.top + (compact ? 12 : 18),
+        paddingBottom: compact ? 12 : 16,
+        alignItems: "center",
+        overflow: "hidden",
+      }}
     >
       <StatusBar style="dark" />
 
-      {/* Soft light blooms. The reference sits on a photo of a warm room; these
-          stand in for that glow so the header has depth instead of a flat wash. */}
+      {/* Soft light blooms — stand-ins for the warm room photo we have no asset for. */}
       <View
         pointerEvents="none"
         style={{
@@ -531,52 +594,95 @@ export function AuthHeaderLight({ tagline }: { tagline?: string }) {
         }}
       />
 
-      {/* halo behind the mark, so the tile sits in light rather than on top of it */}
-      <View style={{ alignItems: "center", justifyContent: "center" }}>
+      {onBack ? (
+        <Pressable
+          onPress={onBack}
+          hitSlop={10}
+          style={({ pressed }) => ({
+            position: "absolute",
+            right: 16,
+            top: insets.top + 8,
+            width: 38,
+            height: 38,
+            borderRadius: 19,
+            backgroundColor: "#ffffff",
+            borderWidth: 1,
+            borderColor: colors.border,
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: pressed ? 0.7 : 1,
+            zIndex: 2,
+            shadowColor: "#3d2413",
+            shadowOpacity: 0.1,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: 3,
+          })}
+        >
+          <Ionicons name="arrow-forward" size={20} color={colors.text} />
+        </Pressable>
+      ) : null}
+
+      {/* the mark in its pool of light, trades floating around it */}
+      <View
+        style={{
+          alignSelf: "stretch",
+          alignItems: "center",
+          justifyContent: "center",
+          height: tile + (compact ? 24 : 40),
+        }}
+      >
         <View
           pointerEvents="none"
           style={{
             position: "absolute",
-            width: 148,
-            height: 148,
-            borderRadius: 74,
-            backgroundColor: "rgba(226,130,68,0.14)",
+            width: tile + 52,
+            height: tile + 52,
+            borderRadius: (tile + 52) / 2,
+            backgroundColor: "rgba(226,130,68,0.13)",
           }}
         />
         <View
           pointerEvents="none"
           style={{
             position: "absolute",
-            width: 116,
-            height: 116,
-            borderRadius: 58,
-            backgroundColor: "rgba(226,130,68,0.16)",
+            width: tile + 24,
+            height: tile + 24,
+            borderRadius: (tile + 24) / 2,
+            backgroundColor: "rgba(226,130,68,0.15)",
           }}
         />
+
+        {/* the "picture": the app's trades orbiting the mark */}
+        <TradeChip icon="flash" top={compact ? 0 : 4} shift={-92} tilt="-10deg" size={compact ? 32 : 38} />
+        <TradeChip icon="pipe-wrench" top={compact ? 36 : 56} shift={100} tilt="12deg" size={compact ? 32 : 40} />
+        <TradeChip icon="format-paint" top={compact ? 44 : 66} shift={-116} tilt="8deg" size={compact ? 28 : 34} />
+        <TradeChip icon="star" top={compact ? -4 : -2} shift={92} tilt="-6deg" size={compact ? 24 : 28} gold />
+
         <LinearGradient
           {...brandGradientBrightProps}
           style={{
-            width: 94,
-            height: 94,
-            borderRadius: 28,
+            width: tile,
+            height: tile,
+            borderRadius: tile * 0.3,
             alignItems: "center",
             justifyContent: "center",
             shadowColor: colors.brand,
             shadowOpacity: 0.45,
-            shadowRadius: 22,
-            shadowOffset: { width: 0, height: 12 },
+            shadowRadius: 20,
+            shadowOffset: { width: 0, height: 10 },
             elevation: 12,
           }}
         >
-          <MaterialCommunityIcons name="hammer-wrench" size={44} color="#ffffff" />
+          <MaterialCommunityIcons name="hammer-wrench" size={tile * 0.47} color="#ffffff" />
         </LinearGradient>
       </View>
 
       {/* two-tone wordmark — always Latin, in both languages */}
       <Text
         style={{
-          marginTop: 18,
-          fontSize: 33,
+          marginTop: compact ? 6 : 10,
+          fontSize: compact ? 24 : 30,
           fontWeight: "800",
           writingDirection: "ltr",
           letterSpacing: -0.2,
@@ -586,10 +692,34 @@ export function AuthHeaderLight({ tagline }: { tagline?: string }) {
         Dal<Text style={{ color: colors.brand }}>Connect</Text>
       </Text>
 
+      {roleChip ? (
+        <View
+          style={{
+            ...ROW,
+            gap: 6,
+            marginTop: 7,
+            backgroundColor: "#ffffff",
+            borderWidth: 1,
+            borderColor: "rgba(226,130,68,0.35)",
+            borderRadius: radius.full,
+            paddingHorizontal: 14,
+            paddingVertical: 5,
+            shadowColor: "#3d2413",
+            shadowOpacity: 0.08,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: 2,
+          }}
+        >
+          <Ionicons name={roleChip.icon} size={14} color={colors.brand} />
+          <Text style={{ color: colors.brand, fontSize: 12.5, fontWeight: "800" }}>{roleChip.label}</Text>
+        </View>
+      ) : null}
+
       {tagline ? (
-        <View style={{ ...ROW, gap: 12, marginTop: 10, paddingHorizontal: 40, alignSelf: "stretch" }}>
+        <View style={{ ...ROW, gap: 12, marginTop: 7, paddingHorizontal: 44, alignSelf: "stretch" }}>
           <View style={{ flex: 1, height: 1, backgroundColor: "rgba(28,25,23,0.10)" }} />
-          <Text style={{ color: colors.muted, fontSize: 13 }}>{tagline}</Text>
+          <Text style={{ color: colors.muted, fontSize: 12.5 }}>{tagline}</Text>
           <View style={{ flex: 1, height: 1, backgroundColor: "rgba(28,25,23,0.10)" }} />
         </View>
       ) : null}
@@ -601,18 +731,18 @@ export function AuthHeaderLight({ tagline }: { tagline?: string }) {
 export function AuthGreeting({ title, subtitle }: { title: string; subtitle?: string }) {
   const { colors } = useTheme();
   return (
-    <View style={{ alignItems: "center", gap: 6 }}>
-      <Text style={{ color: colors.text, fontSize: 26, fontWeight: "800", textAlign: "center" }}>{title}</Text>
+    <View style={{ alignItems: "center", gap: 3 }}>
+      <Text style={{ color: colors.text, fontSize: 22, fontWeight: "800", textAlign: "center" }}>{title}</Text>
       {subtitle ? (
-        <Text style={{ color: colors.muted, fontSize: 14, textAlign: "center" }}>{subtitle}</Text>
+        <Text style={{ color: colors.muted, fontSize: 13.5, textAlign: "center" }}>{subtitle}</Text>
       ) : null}
       <View
         style={{
-          width: 46,
+          width: 44,
           height: 3,
           borderRadius: radius.full,
           backgroundColor: colors.brand,
-          marginTop: 6,
+          marginTop: 5,
         }}
       />
     </View>
@@ -737,10 +867,69 @@ export function PasswordCard({
 export function OrDivider({ label }: { label: string }) {
   const { colors } = useTheme();
   return (
-    <View style={{ ...ROW, gap: 12, marginTop: spacing.lg }}>
+    <View style={{ ...ROW, gap: 12 }}>
       <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
       <Text style={{ color: colors.muted, fontSize: 13 }}>{label}</Text>
       <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
     </View>
+  );
+}
+
+/**
+ * Cross-role door presented as a real card: icon disc, a title, and one line
+ * that says who it is for — instead of a bare outlined button floating far
+ * from everything.
+ */
+export function EntranceCard({
+  icon,
+  title,
+  subtitle,
+  onPress,
+}: {
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  title: string;
+  subtitle?: string;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        {
+          ...ROW,
+          gap: 12,
+          backgroundColor: colors.brandTint,
+          borderWidth: 1,
+          borderColor: "rgba(226,130,68,0.35)",
+          borderRadius: 18,
+          paddingHorizontal: 14,
+          paddingVertical: 12,
+        },
+        pressed ? { opacity: 0.85, transform: [{ scale: 0.99 }] } : null,
+      ]}
+    >
+      <View
+        style={{
+          width: 42,
+          height: 42,
+          borderRadius: 14,
+          backgroundColor: colors.brand,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <MaterialCommunityIcons name={icon} size={22} color={colors.onBrand} />
+      </View>
+      <View style={{ flex: 1, gap: 1 }}>
+        <Text style={[RTL_TEXT, { color: colors.text, fontSize: 14.5, fontWeight: "800" }]}>{title}</Text>
+        {subtitle ? (
+          <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12 }]} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      <Ionicons name="chevron-back" size={18} color={colors.brand} />
+    </Pressable>
   );
 }

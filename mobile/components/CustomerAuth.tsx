@@ -20,7 +20,7 @@ import {
   AuthGreeting,
   AuthTabs,
   AuthCta,
-  AuthFooter,
+  EntranceCard,
   FieldCard,
   PasswordCard,
   FormError,
@@ -182,10 +182,10 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
         style={{
           flexGrow: 1,
           backgroundColor: colors.card,
-          paddingHorizontal: 22,
-          paddingTop: 4,
-          paddingBottom: 32,
-          gap: 22,
+          paddingHorizontal: 20,
+          paddingTop: 2,
+          paddingBottom: 28,
+          gap: 16,
         }}
       >
         <AuthGreeting
@@ -369,16 +369,17 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
 
         <OrDivider label={t("authOr")} />
 
-        {/* providers sign in on their own track — the button says it all */}
-        <AuthFooter
-          action={t("provSignInEntry")}
-          icon="construct-outline"
+        {/* providers have their own entrance — a card that says who it is for */}
+        <EntranceCard
+          icon="hammer-wrench"
+          title={t("provSignInEntry")}
+          subtitle={t("provEntranceSub")}
           onPress={() => router.push("/(auth)/sign-in-provider")}
         />
 
         {/* forgot password → support (sign-in only) — unchanged */}
         {signingIn ? (
-          <View style={{ alignItems: "center", gap: spacing.sm, marginTop: spacing.xl }}>
+          <View style={{ alignItems: "center", gap: spacing.sm, marginTop: spacing.xs }}>
             <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, textAlign: "center" }]}>
               {t("authForgotNote")}
             </Text>

@@ -14,12 +14,12 @@ import { ROW, RTL_TEXT } from "../../lib/rtl";
 import { Button } from "../../components/ui";
 import {
   AuthScreen,
-  AuthHero,
-  AuthSheet,
+  AuthHeaderLight,
+  AuthGreeting,
   AuthCta,
   AuthLink,
-  IconInput,
-  PasswordField,
+  FieldCard,
+  PasswordCard,
   FormError,
 } from "../../components/auth-ui";
 import { useAuth } from "../../context/AuthContext";
@@ -129,18 +129,28 @@ export default function RegisterProvider() {
   const termsInvalid = Boolean(liveErrors.terms);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.brand }}>
-      <AuthScreen>
-        <AuthHero
-          title={t("provRegTitle")}
-          tagline={t("provRegTagline")}
-          icon="hammer-wrench"
+    <View style={{ flex: 1, backgroundColor: colors.card }}>
+      <AuthScreen light>
+        <AuthHeaderLight
+          compact
+          roleChip={{ icon: "construct-outline", label: t("proGateTitle") }}
           onBack={() => router.back()}
         />
 
-        <AuthSheet>
+        <View
+          style={{
+            flexGrow: 1,
+            backgroundColor: colors.card,
+            paddingHorizontal: 20,
+            paddingTop: 2,
+            paddingBottom: 28,
+            gap: 16,
+          }}
+        >
+          <AuthGreeting title={t("provRegTitle")} subtitle={t("provRegTagline")} />
+
           <View style={{ gap: 14 }}>
-            <IconInput
+            <FieldCard
               key="prov-name"
               label={t("authFullName")}
               icon="person-outline"
@@ -150,7 +160,7 @@ export default function RegisterProvider() {
               placeholder={t("authFullNamePh")}
               autoCapitalize="words"
             />
-            <IconInput
+            <FieldCard
               key="prov-biz"
               label={t("provBusinessName")}
               icon="briefcase-outline"
@@ -159,7 +169,7 @@ export default function RegisterProvider() {
               error={liveErrors.businessName}
               placeholder={t("provBusinessNamePh")}
             />
-            <IconInput
+            <FieldCard
               label={t("authPhone")}
               icon="call-outline"
               value={phone}
@@ -177,7 +187,7 @@ export default function RegisterProvider() {
 
             {/* the login number, derived and read-only */}
             <View pointerEvents="none">
-              <IconInput
+              <FieldCard
                 label={t("provNoLabel")}
                 icon="keypad-outline"
                 editable={false}
@@ -198,14 +208,14 @@ export default function RegisterProvider() {
               />
             </View>
 
-            <PasswordField
+            <PasswordCard
               label={t("authPassword")}
               value={password}
               onChangeText={setPassword}
               error={liveErrors.password}
               placeholder={t("authPasswordPh")}
             />
-            <PasswordField
+            <PasswordCard
               label={t("authConfirmPassword")}
               value={confirm}
               onChangeText={setConfirm}
@@ -276,13 +286,11 @@ export default function RegisterProvider() {
             </View>
           </View>
 
-          <View style={{ marginTop: spacing.lg }}>
-            <AuthLink
-              label={t("authGoSignIn")}
-              onPress={() => router.replace("/(auth)/sign-in-provider")}
-            />
-          </View>
-        </AuthSheet>
+          <AuthLink
+            label={t("authGoSignIn")}
+            onPress={() => router.replace("/(auth)/sign-in-provider")}
+          />
+        </View>
       </AuthScreen>
 
       {/* success — the login number is the whole point of this screen */}
