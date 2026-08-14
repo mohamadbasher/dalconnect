@@ -57,6 +57,11 @@ export const common: Dict = {
 
   // booking statuses
   statusOpen: { ar: "بانتظار العروض", he: "ממתין להצעות" },
+  // Replaces statusOpen the moment a real offer exists — "waiting" is no longer
+  // true, so the pill shouldn't keep saying it. Same singular/plural split as
+  // the offers banner ("{n} عروض" reads wrong in both languages for n=1).
+  statusOffersReady: { ar: "وصلتك {n} عروض", he: "יש לכם {n} הצעות" },
+  statusOffersReadyOne: { ar: "وصلك عرض", he: "יש לכם הצעה" },
   statusPending: { ar: "بانتظار الموافقة", he: "ממתין לאישור" },
   statusAccepted: { ar: "مقبول", he: "אושר" },
   statusOnTheWay: { ar: "في الطريق", he: "בדרך" },
