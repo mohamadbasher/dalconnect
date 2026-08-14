@@ -595,7 +595,14 @@ export default function BookingDetail() {
                   );
                   return (
                     <View key={key} style={{ flex: 1, alignItems: "center", gap: 6 }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", width: "100%" }}>
+                      {/* height fixed to the LARGEST dot (22, the current step's).
+                          Each milestone's row was sized to its own dot instead —
+                          14px for five of them, 22px for the current one — and
+                          with the outer track aligned to flex-start (tops, not
+                          centers), that made the current step's row taller, so
+                          its centered line sat ~4px lower than its neighbours':
+                          a visible step in the line exactly at the current dot. */}
+                      <View style={{ flexDirection: "row", alignItems: "center", width: "100%", height: 22 }}>
                         {line(!last, done)}
                         {/* the current step is the answer to "where am I?", so it
                             is the only filled, ringed, brand-coloured dot */}
