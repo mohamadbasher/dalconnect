@@ -4,12 +4,42 @@ import type { Dict } from "../index";
 export const booking: Dict = {
   // ----- create booking -----
   newBooking: { ar: "طلب خدمة جديد", he: "בקשת שירות חדשה" },
+  newBookingSubtitle: {
+    ar: "احكي لنا شو المشكلة ومنوصّل طلبك للمهنيين بمنطقتك",
+    he: "ספרו לנו מה הבעיה ונעביר את הבקשה לבעלי המקצוע באזורכם",
+  },
   bookingWith: { ar: "أنت تطلب من", he: "אתם מזמינים אצל" },
   openRequestInfo: {
     ar: "سيصلك عروض أسعار من المهنيين القريبين منك — اختر العرض الأنسب لك",
     he: "בעלי מקצוע באזורכם ישלחו לכם הצעות מחיר — בחרו את ההצעה שמתאימה לכם",
   },
+  // Sits by the CTA, not at the top: nobody needs the payoff explained before
+  // they've described the problem.
+  afterSubmitNote: {
+    ar: "بعد ما تبعث الطلب، بتبلّش توصلك عروض من مهنيين مناسبين بمنطقتك",
+    he: "לאחר שליחת הבקשה תתחילו לקבל הצעות מבעלי מקצוע מתאימים באזורכם",
+  },
   chooseCategory: { ar: "اختر الفئة", he: "בחרו קטגוריה" },
+  changeCategory: { ar: "تغيير", he: "שינוי" },
+  searchCategory: { ar: "ابحث عن خدمة…", he: "חיפוש שירות…" },
+  stepProblem: { ar: "شو المشكلة؟", he: "מה הבעיה?" },
+  stepProblemHint: {
+    ar: "فصّل قد ما بتقدر عشان توصلك عروض أدق",
+    he: "פרטו כמה שיותר כדי לקבל הצעות מדויקות יותר",
+  },
+  stepWhere: { ar: "وين بدك الخدمة؟", he: "איפה השירות?" },
+  // What's still missing, shown above a disabled CTA. A greyed-out button with
+  // no reason is a dead end.
+  submitMissing: { ar: "لسا ناقص: {what}", he: "עוד חסר: {what}" },
+  missCategory: { ar: "الخدمة", he: "השירות" },
+  missDescription: { ar: "وصف المشكلة", he: "תיאור הבעיה" },
+  missWhen: { ar: "وقت الخدمة", he: "מתי" },
+  missWhere: { ar: "المدينة", he: "העיר" },
+  locationNearestCity: { ar: "حدّدنا مدينتك: {city}", he: "זיהינו את העיר: {city}" },
+  useMyLocationSub: {
+    ar: "منستعمل موقعك لنلاقي مهنيين قريبين منك",
+    he: "נשתמש במיקום שלכם לאיתור בעלי מקצוע באזורכם",
+  },
   categoryRequired: { ar: "الرجاء اختيار الفئة", he: "נא לבחור קטגוריה" },
   bookingTitleLabel: { ar: "عنوان الطلب", he: "כותרת הבקשה" },
   bookingTitlePlaceholder: { ar: "مثال: تركيب مكيف جديد", he: "לדוגמה: התקנת מזגן חדש" },
@@ -20,7 +50,13 @@ export const booking: Dict = {
   },
   descriptionTooShort: { ar: "الوصف قصير جداً — ١٠ أحرف على الأقل", he: "התיאור קצר מדי — לפחות 10 תווים" },
   photosLabel: { ar: "صور (حتى {n})", he: "תמונות (עד {n})" },
+  photosOptional: { ar: "صور (اختياري)", he: "תמונות (אופציונלי)" },
+  photosHint: {
+    ar: "الصورة بتساعد المهني يعطيك سعر أدق",
+    he: "תמונה עוזרת לבעל המקצוע לתת הצעת מחיר מדויקת יותר",
+  },
   addPhoto: { ar: "إضافة صورة", he: "הוספת תמונה" },
+  addPhotos: { ar: "إضافة صور", he: "הוספת תמונות" },
   locationLabel: { ar: "الموقع", he: "מיקום" },
   chooseCity: { ar: "اختر المدينة", he: "בחרו עיר" },
   searchCity: { ar: "ابحث عن مدينة…", he: "חיפוש עיר…" },
@@ -42,18 +78,6 @@ export const booking: Dict = {
   scheduleSummary: { ar: "موعدك: {date} الساعة {time}", he: "המועד שלכם: {date} בשעה {time}" },
   submitBooking: { ar: "إرسال الطلب", he: "שליחת הבקשה" },
   uploadingPhotos: { ar: "جاري رفع الصور… {n}/{total}", he: "מעלים תמונות… {n}/{total}" },
-
-  // ----- completion meter -----
-  meterTitle: { ar: "اكتمال الطلب", he: "שלמות הבקשה" },
-  meterReady: { ar: "طلبك واضح وجاهز للإرسال ✨", he: "הבקשה ברורה ומוכנה לשליחה ✨" },
-  meterRemaining: {
-    ar: "أضف {n} تفاصيل ليصلك عروض أدق",
-    he: "הוסיפו עוד {n} פרטים כדי לקבל הצעות מדויקות יותר",
-  },
-  meterCategory: { ar: "الفئة", he: "קטגוריה" },
-  meterDescription: { ar: "الوصف", he: "תיאור" },
-  meterPlace: { ar: "الموقع", he: "מיקום" },
-  meterPhotos: { ar: "الصور", he: "תמונות" },
 
   // ----- toasts -----
   bookingSentToast: { ar: "تم إرسال طلبك للمهني", he: "הבקשה נשלחה לבעל המקצוע" },

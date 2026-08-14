@@ -100,7 +100,6 @@ export const home: Dict = {
   },
   urgencyCostsMore: { ar: "رسوم أعلى", he: "עלות גבוהה יותר" },
   urgencyRequired: { ar: "اختر إيمتى بتحتاج الخدمة", he: "בחרו מתי אתם צריכים את השירות" },
-  meterUrgency: { ar: "التوقيت", he: "תזמון" },
   urgencyFeeNote: {
     ar: "رسوم إنشاء الطلب على المنصة",
     he: "דמי פתיחת בקשה בפלטפורמה",

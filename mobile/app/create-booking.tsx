@@ -2,8 +2,11 @@
 // customer picks a service and an urgency, and every nearby professional in
 // that trade is invited to quote. Customers never pick the professional.
 //
-// Presentation: clearly separated blocks (SectionHeader + generous rhythm),
-// urgency as the centrepiece, a quiet completion meter docked above the CTA.
+// Presentation: three numbered questions — what, when, where — each in its own
+// card, with everything conditional hidden until it's relevant. The chosen
+// trade is a one-line receipt at the top rather than a chooser, and the CTA
+// stays disabled (naming what's missing) until the request can actually reach
+// someone.
 import React, { useEffect, useMemo, useState } from "react";
 import {
   FlatList,
@@ -35,11 +38,9 @@ import {
   Badge,
   Button,
   Chip,
-  InlineNote,
   Input,
   Loading,
   SearchBar,
-  SectionHeader,
   SheetHandle,
   pressCard,
 } from "../components/ui";
@@ -95,6 +96,8 @@ export default function CreateBooking() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [cityModal, setCityModal] = useState(false);
   const [citySearch, setCitySearch] = useState("");
+  const [catModal, setCatModal] = useState(false);
+  const [catSearch, setCatSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ n: number; total: number } | null>(null);
   const [errors, setErrors] = useState<{
@@ -157,20 +160,20 @@ export default function CreateBooking() {
       month: "long",
     });
 
-  // ---- completion meter (guidance, not a gate) ----
-  const checks = useMemo(
-    () => [
-      categoryId !== null,
-      description.trim().length >= 10,
-      urgency !== null,
-      cityId !== null || address.trim().length > 0,
-      photos.length > 0,
-    ],
-    [categoryId, description, urgency, cityId, address, photos.length]
-  );
-  const doneCount = checks.filter(Boolean).length;
-  const pct = Math.round((doneCount / checks.length) * 100);
-  const complete = doneCount === checks.length;
+  // ---- what the request still needs before it can be sent ----
+  // A percentage told the customer how full a form was; this tells them what to
+  // do next. Photos are deliberately absent — they help, they aren't required.
+  const missing = useMemo(() => {
+    const out: string[] = [];
+    if (categoryId === null) out.push(t("missCategory"));
+    if (description.trim().length < 10) out.push(t("missDescription"));
+    if (urgency === null) out.push(t("missWhen"));
+    // The city is what routes the request: notify_new_open_booking matches pros
+    // on category + city, and a null city fans out to every pro in the country.
+    if (cityId === null) out.push(t("missWhere"));
+    return out;
+  }, [categoryId, description, urgency, cityId, t]);
+  const canSubmit = missing.length === 0;
 
   const pickPhotos = async () => {
     if (photos.length >= MAX_PHOTOS) return;
@@ -185,6 +188,31 @@ export default function CreateBooking() {
     setPhotos((prev) => [...prev, ...uris].slice(0, MAX_PHOTOS));
   };
 
+  /**
+   * Nearest city to a point, by straight-line distance.
+   *
+   * Equirectangular rather than haversine: over a country 400km tall the error
+   * is metres, and we only need to rank cities that are tens of kilometres
+   * apart. cos(lat) corrects the longitude degrees, which is the part that
+   * actually matters at Israel's latitude.
+   */
+  const nearestCity = (lat: number, lng: number): City | null => {
+    const k = Math.cos((lat * Math.PI) / 180);
+    let best: City | null = null;
+    let bestD = Infinity;
+    for (const c of cities) {
+      if (c.lat == null || c.lng == null) continue;
+      const dy = c.lat - lat;
+      const dx = (c.lng - lng) * k;
+      const d = dy * dy + dx * dx;
+      if (d < bestD) {
+        bestD = d;
+        best = c;
+      }
+    }
+    return best;
+  };
+
   const useMyLocation = async () => {
     setLocating(true);
     const pos = await getCurrentPosition();
@@ -194,6 +222,14 @@ export default function CreateBooking() {
       return;
     }
     setCoords(pos);
+    // The button says "use my current location", so it should finish the job.
+    // Dropping a pin while leaving "choose city" empty — the field that decides
+    // which professionals ever see the request — would be a half-done answer.
+    const city = nearestCity(pos.lat, pos.lng);
+    if (city) {
+      setCityId(city.id);
+      toast.success(t("locationNearestCity", { city: loc(city, "name") }));
+    }
     Haptics.selectionAsync().catch(() => {});
   };
 
@@ -211,15 +247,24 @@ export default function CreateBooking() {
   };
 
   const selectedCity = cities.find((c) => c.id === cityId) ?? null;
+  const selectedCategory = (categories ?? []).find((c) => c.id === categoryId) ?? null;
   const filteredCities = useMemo(() => {
     const q = citySearch.trim();
     if (!q) return cities;
     return cities.filter((c) => c.name_ar.includes(q) || c.name_he.includes(q));
   }, [cities, citySearch]);
+  const filteredCategories = useMemo(() => {
+    const q = catSearch.trim();
+    const all = categories ?? [];
+    if (!q) return all;
+    return all.filter((c) => c.name_ar.includes(q) || c.name_he.includes(q));
+  }, [categories, catSearch]);
 
   const submit = async () => {
     const uid = session?.user.id;
-    if (!uid || submitting) return;
+    // The CTA is disabled until `missing` is empty; this is the belt to its
+    // braces, so no future caller can post a request that reaches nobody.
+    if (!uid || submitting || !canSubmit) return;
     const errs: typeof errors = {};
     if (!categoryId) errs.category = t("categoryRequired");
     if (description.trim().length < 10) errs.description = t("descriptionTooShort");
@@ -362,7 +407,12 @@ export default function CreateBooking() {
   };
 
   /** shared look for the two "tap to choose" rows (date, city) */
-  const pickerRow = (label: string, placeholder: boolean, onPress: () => void, icon?: "calendar-outline") => (
+  const pickerRow = (
+    label: string,
+    placeholder: boolean,
+    onPress: () => void,
+    icon?: "calendar-outline" | "location-outline"
+  ) => (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
@@ -395,6 +445,45 @@ export default function CreateBooking() {
   const fieldError = (msg?: string) =>
     msg ? <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{msg}</Text> : null;
 
+  /** numbered step heading — the form reads as three questions, not one wall */
+  const stepHeader = (n: number, title: string, hint?: string) => (
+    <View style={{ gap: 4 }}>
+      <View style={{ ...ROW, alignItems: "center", gap: spacing.sm }}>
+        <View
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: radius.full,
+            backgroundColor: colors.brand,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ color: colors.onBrand, fontSize: 12.5, fontWeight: "800" }}>{n}</Text>
+        </View>
+        <Text style={{ color: colors.text, fontSize: 16.5, fontWeight: "800" }}>{title}</Text>
+      </View>
+      {hint ? (
+        <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12, paddingStart: 32 }]}>{hint}</Text>
+      ) : null}
+    </View>
+  );
+
+  /** each step is its own card, so the eye can tell where one question ends */
+  const stepCard = (children: React.ReactNode) => (
+    <View
+      style={{
+        backgroundColor: colors.card,
+        borderRadius: radius.lg,
+        padding: spacing.lg,
+        gap: spacing.md,
+        ...shadows.card,
+      }}
+    >
+      {children}
+    </View>
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       {/* header — RTL back arrow points right and sits on the right */}
@@ -411,9 +500,14 @@ export default function CreateBooking() {
         <Pressable onPress={() => router.back()} hitSlop={10}>
           <Ionicons name="arrow-forward" size={24} color={colors.text} />
         </Pressable>
-        <Text style={[RTL_TEXT, { flex: 1, color: colors.text, fontSize: 18, fontWeight: "800" }]}>
-          {t("newBooking")}
-        </Text>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[RTL_TEXT, { color: colors.text, fontSize: 18, fontWeight: "800" }]}>
+            {t("newBooking")}
+          </Text>
+          <Text numberOfLines={2} style={[RTL_TEXT, { color: colors.muted, fontSize: 12, lineHeight: 17 }]}>
+            {t("newBookingSubtitle")}
+          </Text>
+        </View>
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -426,67 +520,177 @@ export default function CreateBooking() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* how this works */}
-          <InlineNote tone="info" icon="information-outline" text={t("openRequestInfo")} />
-
-          {/* 1 — service */}
-          <View style={{ gap: spacing.md }}>
-            <SectionHeader title={t("chooseCategory")} />
-            {/* `inverted` makes the strip start from the right */}
-            <FlatList
-              data={categories}
-              horizontal
-              inverted
-              keyExtractor={(c) => String(c.id)}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: spacing.sm }}
-              style={{ flexGrow: 0 }}
-              renderItem={({ item }) => (
-                <Chip
-                  label={loc(item, "name")}
-                  icon={item.icon as keyof typeof MaterialCommunityIcons.glyphMap}
-                  active={categoryId === item.id}
-                  onPress={() => {
-                    setCategoryId(item.id);
-                    setErrors((e) => ({ ...e, category: undefined }));
-                  }}
-                />
-              )}
-            />
-            {fieldError(errors.category)}
-          </View>
-
-          {/* 2 — what needs doing */}
-          <View style={{ gap: spacing.md }}>
-            <SectionHeader title={t("detailsTitle")} />
-            <Input
-              label={`${t("bookingTitleLabel")} (${t("optional")})`}
-              placeholder={t("bookingTitlePlaceholder")}
-              value={title}
-              onChangeText={setTitle}
-              maxLength={80}
-            />
-            <Input
-              label={t("descriptionLabel")}
-              placeholder={t("descriptionPlaceholder")}
-              value={description}
-              onChangeText={(v) => {
-                setDescription(v);
-                if (v.trim().length >= 10) setErrors((e) => ({ ...e, description: undefined }));
+          {/* the service — a receipt, not a chooser. The customer arrived here by
+              tapping a trade; re-offering 31 alternatives invites second-guessing
+              a decision they already made. One line, one way out. */}
+          <Pressable
+            onPress={() => setCatModal(true)}
+            style={({ pressed }) => [
+              {
+                ...ROW,
+                alignItems: "center",
+                gap: spacing.md,
+                backgroundColor: colors.card,
+                borderRadius: radius.lg,
+                borderWidth: 1.5,
+                borderColor: errors.category ? colors.danger : "transparent",
+                padding: spacing.md,
+                ...shadows.card,
+              },
+              pressed ? pressCard : null,
+            ]}
+          >
+            <View
+              style={{
+                width: 46,
+                height: 46,
+                borderRadius: radius.tile,
+                backgroundColor: colors.brandTint,
+                alignItems: "center",
+                justifyContent: "center",
               }}
-              error={errors.description}
-              multiline
-              numberOfLines={4}
-              style={{ minHeight: 100, textAlignVertical: "top" }}
-            />
-          </View>
+            >
+              <MaterialCommunityIcons
+                name={
+                  (selectedCategory?.icon as keyof typeof MaterialCommunityIcons.glyphMap) ?? "tools"
+                }
+                size={24}
+                color={colors.brand}
+              />
+            </View>
+            <Text
+              numberOfLines={1}
+              style={[
+                RTL_TEXT,
+                {
+                  flex: 1,
+                  color: selectedCategory ? colors.text : colors.faint,
+                  fontSize: 16.5,
+                  fontWeight: "800",
+                },
+              ]}
+            >
+              {selectedCategory ? loc(selectedCategory, "name") : t("chooseCategory")}
+            </Text>
+            <View style={{ ...ROW, alignItems: "center", gap: 2 }}>
+              <Text style={{ color: colors.brand, fontSize: 13.5, fontWeight: "700" }}>
+                {t("changeCategory")}
+              </Text>
+              <Ionicons name="chevron-back" size={14} color={colors.brand} />
+            </View>
+          </Pressable>
+          {fieldError(errors.category)}
 
-          {/* 3 — urgency: the pricing decision, so it owns the block */}
-          <View style={{ gap: spacing.md }}>
-            <SectionHeader title={t("urgencyTitle")} />
-            {urgencyCard("same_day", "flash", "urgencySameDay", "urgencySameDaySub")}
-            {urgencyCard("scheduled", "calendar-clock", "urgencyScheduled", "urgencyScheduledSub")}
-            {fieldError(errors.urgency)}
+          {/* 1 — the problem, with photos folded in: they describe the same thing */}
+          {stepCard(
+            <>
+              {stepHeader(1, t("stepProblem"), t("stepProblemHint"))}
+              <Input
+                label={`${t("bookingTitleLabel")} (${t("optional")})`}
+                placeholder={t("bookingTitlePlaceholder")}
+                value={title}
+                onChangeText={setTitle}
+                maxLength={80}
+              />
+              <Input
+                label={t("descriptionLabel")}
+                placeholder={t("descriptionPlaceholder")}
+                value={description}
+                onChangeText={(v) => {
+                  setDescription(v);
+                  if (v.trim().length >= 10) setErrors((e) => ({ ...e, description: undefined }));
+                }}
+                error={errors.description}
+                multiline
+                numberOfLines={4}
+                style={{ minHeight: 100, textAlignVertical: "top" }}
+              />
+
+              {/* photos — optional, and the label now says what they're worth
+                  rather than how many fit */}
+              <View
+                style={{
+                  gap: spacing.sm,
+                  backgroundColor: colors.bg,
+                  borderRadius: radius.md,
+                  padding: spacing.md,
+                }}
+              >
+                <View style={{ ...ROW, alignItems: "center", gap: spacing.sm }}>
+                  <Ionicons name="camera-outline" size={17} color={colors.brand} />
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={[RTL_TEXT, { color: colors.text, fontSize: 13.5, fontWeight: "700" }]}>
+                      {t("photosOptional")}
+                    </Text>
+                    <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 11.5, lineHeight: 16 }]}>
+                      {t("photosHint")}
+                    </Text>
+                  </View>
+                </View>
+                {/* row-reverse: the "add" tile sits first, on the right */}
+                <View style={{ ...ROW, gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+                  {photos.length < MAX_PHOTOS ? (
+                    <Pressable
+                      onPress={pickPhotos}
+                      style={({ pressed }) => [
+                        {
+                          width: 64,
+                          height: 64,
+                          borderRadius: radius.md,
+                          borderWidth: 1.5,
+                          borderStyle: "dashed",
+                          borderColor: colors.border,
+                          backgroundColor: colors.card,
+                          alignItems: "center",
+                          justifyContent: "center",
+                        },
+                        pressed ? pressCard : null,
+                      ]}
+                    >
+                      <Ionicons name="add" size={24} color={colors.brand} />
+                    </Pressable>
+                  ) : null}
+                  {photos.map((uri) => (
+                    <View key={uri} style={{ width: 64, height: 64 }}>
+                      <Image
+                        source={{ uri }}
+                        style={{ width: 64, height: 64, borderRadius: radius.md, backgroundColor: colors.chip }}
+                        contentFit="cover"
+                      />
+                      {/* mirrored corner: RTL content starts on the right, so the
+                          remove affordance lives on the left */}
+                      <Pressable
+                        onPress={() => setPhotos((prev) => prev.filter((p) => p !== uri))}
+                        hitSlop={8}
+                        style={{
+                          position: "absolute",
+                          top: -6,
+                          left: -6,
+                          width: 20,
+                          height: 20,
+                          borderRadius: radius.full,
+                          backgroundColor: colors.danger,
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Ionicons name="close" size={13} color={colors.onBrand} />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </>
+          )}
+
+          {/* 2 — when. The date/time fields stay hidden until "later" is picked,
+                 so the common case (today) never shows an empty calendar. */}
+          {stepCard(
+            <>
+              {stepHeader(2, t("urgencyTitle"))}
+              {urgencyCard("same_day", "flash", "urgencySameDay", "urgencySameDaySub")}
+              {urgencyCard("scheduled", "calendar-clock", "urgencyScheduled", "urgencyScheduledSub")}
+              {fieldError(errors.urgency)}
 
             {urgency === "scheduled" ? (
               <View style={{ gap: spacing.md, marginTop: spacing.xs }}>
@@ -541,124 +745,98 @@ export default function CreateBooking() {
                     </Text>
                   </View>
                 ) : null}
-                {fieldError(errors.schedule)}
-              </View>
-            ) : null}
-          </View>
-
-          {/* 4 — photos */}
-          <View style={{ gap: spacing.md }}>
-            <SectionHeader title={t("photosLabel", { n: MAX_PHOTOS })} />
-            {/* row-reverse: the "add" tile sits first, on the right */}
-            <View style={{ ...ROW, gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
-              {photos.length < MAX_PHOTOS ? (
-                <Pressable
-                  onPress={pickPhotos}
-                  style={({ pressed }) => [
-                    {
-                      width: 72,
-                      height: 72,
-                      borderRadius: radius.md,
-                      borderWidth: 1.5,
-                      borderStyle: "dashed",
-                      borderColor: colors.border,
-                      backgroundColor: colors.card,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 2,
-                    },
-                    pressed ? pressCard : null,
-                  ]}
-                >
-                  <Ionicons name="camera-outline" size={22} color={colors.brand} />
-                  <Text style={{ color: colors.muted, fontSize: 9.5, fontWeight: "600" }}>{t("addPhoto")}</Text>
-                </Pressable>
+                  {fieldError(errors.schedule)}
+                </View>
               ) : null}
-              {photos.map((uri) => (
-                <View key={uri} style={{ width: 72, height: 72 }}>
-                  <Image
-                    source={{ uri }}
-                    style={{ width: 72, height: 72, borderRadius: radius.md, backgroundColor: colors.chip }}
-                    contentFit="cover"
-                  />
-                  {/* mirrored corner: RTL content starts on the right, so the
-                      remove affordance lives on the left */}
-                  <Pressable
-                    onPress={() => setPhotos((prev) => prev.filter((p) => p !== uri))}
-                    hitSlop={8}
-                    style={{
-                      position: "absolute",
-                      top: -6,
-                      left: -6,
-                      width: 20,
-                      height: 20,
-                      borderRadius: radius.full,
-                      backgroundColor: colors.danger,
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Ionicons name="close" size={13} color={colors.onBrand} />
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          </View>
+            </>
+          )}
 
-          {/* 5 — where */}
-          <View style={{ gap: spacing.md }}>
-            <SectionHeader title={t("locationLabel")} />
-            {pickerRow(
-              selectedCity ? loc(selectedCity, "name") : t("chooseCity"),
-              selectedCity === null,
-              () => setCityModal(true)
-            )}
-            <Input
-              label={t("addressLabel")}
-              placeholder={t("addressPlaceholder")}
-              value={address}
-              onChangeText={setAddress}
-            />
-            <View style={{ ...ROW }}>
-              <Chip
-                label={locating ? t("loading") : t("useMyLocation")}
-                icon="crosshairs-gps"
-                active={coords !== null}
+          {/* 3 — where. One tap should finish this step: the GPS button pins the
+                 map AND picks the city, which is what actually routes the job. */}
+          {stepCard(
+            <>
+              {stepHeader(3, t("stepWhere"))}
+
+              <Pressable
                 onPress={useMyLocation}
-              />
-            </View>
-            {coords ? (
-              <View style={{ gap: 6 }}>
-                <View style={{ borderRadius: radius.lg, overflow: "hidden", ...shadows.card }}>
-                  <MapView
-                    key={`${coords.lat.toFixed(5)}-${coords.lng.toFixed(5)}`}
-                    style={{ height: 120 }}
-                    initialRegion={{
-                      latitude: coords.lat,
-                      longitude: coords.lng,
-                      latitudeDelta: 0.01,
-                      longitudeDelta: 0.01,
-                    }}
-                  >
-                    <Marker
-                      coordinate={{ latitude: coords.lat, longitude: coords.lng }}
-                      draggable
-                      onDragEnd={(e) =>
-                        setCoords({
-                          lat: e.nativeEvent.coordinate.latitude,
-                          lng: e.nativeEvent.coordinate.longitude,
-                        })
-                      }
-                    />
-                  </MapView>
+                disabled={locating}
+                style={({ pressed }) => [
+                  {
+                    ...ROW,
+                    alignItems: "center",
+                    gap: spacing.md,
+                    backgroundColor: coords ? colors.brandTint : colors.bg,
+                    borderRadius: radius.md,
+                    borderWidth: 1.5,
+                    borderColor: coords ? colors.brand : colors.border,
+                    padding: spacing.md,
+                    opacity: locating ? 0.6 : 1,
+                  },
+                  pressed ? pressCard : null,
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name={coords ? "map-marker-check" : "crosshairs-gps"}
+                  size={24}
+                  color={colors.brand}
+                />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={[RTL_TEXT, { color: colors.text, fontSize: 14.5, fontWeight: "800" }]}>
+                    {locating ? t("loading") : t("useMyLocation")}
+                  </Text>
+                  <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 11.5, lineHeight: 16 }]}>
+                    {t("useMyLocationSub")}
+                  </Text>
                 </View>
-                <Text style={[RTL_TEXT, { color: colors.success, fontSize: 12 }]}>{t("locationSet")}</Text>
-              </View>
-            ) : null}
-          </View>
+              </Pressable>
+
+              {pickerRow(
+                selectedCity ? loc(selectedCity, "name") : t("chooseCity"),
+                selectedCity === null,
+                () => setCityModal(true),
+                "location-outline"
+              )}
+
+              <Input
+                label={`${t("addressLabel")} (${t("optional")})`}
+                placeholder={t("addressPlaceholder")}
+                value={address}
+                onChangeText={setAddress}
+              />
+
+              {coords ? (
+                <View style={{ gap: 6 }}>
+                  <View style={{ borderRadius: radius.md, overflow: "hidden" }}>
+                    <MapView
+                      key={`${coords.lat.toFixed(5)}-${coords.lng.toFixed(5)}`}
+                      style={{ height: 120 }}
+                      initialRegion={{
+                        latitude: coords.lat,
+                        longitude: coords.lng,
+                        latitudeDelta: 0.01,
+                        longitudeDelta: 0.01,
+                      }}
+                    >
+                      <Marker
+                        coordinate={{ latitude: coords.lat, longitude: coords.lng }}
+                        draggable
+                        onDragEnd={(e) =>
+                          setCoords({
+                            lat: e.nativeEvent.coordinate.latitude,
+                            lng: e.nativeEvent.coordinate.longitude,
+                          })
+                        }
+                      />
+                    </MapView>
+                  </View>
+                  <Text style={[RTL_TEXT, { color: colors.success, fontSize: 11.5 }]}>{t("locationSet")}</Text>
+                </View>
+              ) : null}
+            </>
+          )}
         </ScrollView>
 
-        {/* sticky submit — the completion meter rides quietly above it */}
+        {/* sticky submit — with the one line that explains its state */}
         <View
           style={{
             paddingHorizontal: spacing.lg,
@@ -671,34 +849,21 @@ export default function CreateBooking() {
             ...shadows.floatUp,
           }}
         >
-          <View style={{ gap: 6 }}>
-            <View style={{ ...ROW, justifyContent: "space-between", gap: spacing.sm }}>
-              <Text numberOfLines={1} style={[RTL_TEXT, { flex: 1, color: colors.muted, fontSize: 11.5 }]}>
-                {complete ? t("meterReady") : t("meterRemaining", { n: checks.length - doneCount })}
-              </Text>
-              <Text style={{ color: complete ? colors.success : colors.brand, fontSize: 11.5, fontWeight: "800" }}>
-                {pct}%
-              </Text>
-            </View>
-            {/* row-reverse track so the bar fills from the right */}
-            <View
-              style={{
-                ...ROW,
-                height: 4,
-                borderRadius: radius.full,
-                backgroundColor: colors.chip,
-                overflow: "hidden",
-              }}
+          {/* A percentage measured how full the form was. This says what to do
+              next — and it's the only thing standing between a greyed-out button
+              and a customer who can't tell why it won't press. */}
+          <View style={{ ...ROW, alignItems: "center", gap: 6 }}>
+            <Ionicons
+              name={canSubmit ? "checkmark-circle" : "information-circle-outline"}
+              size={14}
+              color={canSubmit ? colors.success : colors.muted}
+            />
+            <Text
+              numberOfLines={2}
+              style={[RTL_TEXT, { flex: 1, color: colors.muted, fontSize: 11.5, lineHeight: 16 }]}
             >
-              <View
-                style={{
-                  width: `${pct}%`,
-                  height: "100%",
-                  borderRadius: radius.full,
-                  backgroundColor: complete ? colors.success : colors.brand,
-                }}
-              />
-            </View>
+              {canSubmit ? t("afterSubmitNote") : t("submitMissing", { what: missing.join(" · ") })}
+            </Text>
           </View>
 
           <Button
@@ -709,7 +874,7 @@ export default function CreateBooking() {
             }
             onPress={submit}
             loading={submitting && uploadProgress === null}
-            disabled={submitting}
+            disabled={submitting || !canSubmit}
             icon={uploadProgress ? "cloud-upload-outline" : "send"}
           />
         </View>
@@ -728,6 +893,93 @@ export default function CreateBooking() {
           setErrors((e) => ({ ...e, schedule: undefined }));
         }}
       />
+
+      {/* category picker bottom sheet — reached only via "change", so the full
+          catalogue stays out of the way of someone who already chose */}
+      <Modal visible={catModal} transparent animationType="slide" onRequestClose={() => setCatModal(false)}>
+        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
+          <Pressable style={{ flex: 1 }} onPress={() => setCatModal(false)} />
+          <View
+            style={{
+              backgroundColor: colors.bg,
+              borderTopLeftRadius: radius.xl,
+              borderTopRightRadius: radius.xl,
+              maxHeight: "75%",
+              padding: spacing.lg,
+              paddingBottom: insets.bottom + spacing.lg,
+              gap: spacing.md,
+            }}
+          >
+            <SheetHandle />
+            <View style={{ ...ROW, justifyContent: "space-between" }}>
+              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 17, fontWeight: "800" }]}>
+                {t("chooseCategory")}
+              </Text>
+              <Pressable onPress={() => setCatModal(false)} hitSlop={10}>
+                <Ionicons name="close" size={22} color={colors.muted} />
+              </Pressable>
+            </View>
+            <SearchBar value={catSearch} onChangeText={setCatSearch} placeholder={t("searchCategory")} />
+            <FlatList
+              data={filteredCategories}
+              keyExtractor={(c) => String(c.id)}
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={
+                <Text style={{ color: colors.muted, fontSize: 13.5, paddingVertical: 24, textAlign: "center" }}>
+                  {t("noResults")}
+                </Text>
+              }
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={() => {
+                    setCategoryId(item.id);
+                    setCatModal(false);
+                    setCatSearch("");
+                    setErrors((e) => ({ ...e, category: undefined }));
+                    Haptics.selectionAsync().catch(() => {});
+                  }}
+                  style={{
+                    ...ROW,
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingVertical: 11,
+                    borderBottomWidth: 1,
+                    borderBottomColor: colors.hairline,
+                  }}
+                >
+                  <View style={{ ...ROW, alignItems: "center", gap: spacing.md, flex: 1 }}>
+                    <View
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: radius.md,
+                        backgroundColor: categoryId === item.id ? colors.brand : colors.chip,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <MaterialCommunityIcons
+                        name={item.icon as keyof typeof MaterialCommunityIcons.glyphMap}
+                        size={19}
+                        color={categoryId === item.id ? colors.onBrand : colors.brand}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        RTL_TEXT,
+                        { flex: 1, color: colors.text, fontSize: 15, fontWeight: categoryId === item.id ? "800" : "500" },
+                      ]}
+                    >
+                      {loc(item, "name")}
+                    </Text>
+                  </View>
+                  {categoryId === item.id ? <Ionicons name="checkmark" size={18} color={colors.brand} /> : null}
+                </Pressable>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
 
       {/* city picker bottom sheet */}
       <Modal visible={cityModal} transparent animationType="slide" onRequestClose={() => setCityModal(false)}>
