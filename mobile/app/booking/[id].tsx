@@ -23,6 +23,7 @@ import {
   Text,
   View,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -187,6 +188,12 @@ export default function BookingDetail() {
   const [refreshing, setRefreshing] = useState(false);
   const [busyOfferId, setBusyOfferId] = useState<string | null>(null);
   const [showDeclined, setShowDeclined] = useState(false);
+  /**
+   * The request body collapses only while quotes are the point of the screen.
+   * Once someone is chosen there is nothing left to compare, so the details are
+   * the content again and open by default. Set from the booking once it loads.
+   */
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [contactPhone, setContactPhone] = useState<string | null>(null);
   const [contactLoading, setContactLoading] = useState(false);
   const [rateVisible, setRateVisible] = useState(false);
@@ -333,6 +340,46 @@ export default function BookingDetail() {
     [load, t, toast]
   );
 
+  /**
+   * How many quotes arrived since this screen was last opened.
+   *
+   * A banner that reads "a new offer arrived!" every time you open the screen
+   * for a week isn't news, it's wallpaper — so it's anchored to a per-request
+   * timestamp. The count is taken once per mount and then frozen: pull-to-
+   * refresh shouldn't make the banner vanish out from under the person reading
+   * it. On a first-ever visit every quote is genuinely new, which is right.
+   */
+  // open the request body once the comparing is over
+  const detailsDefaultedRef = useRef(false);
+  useEffect(() => {
+    if (detailsDefaultedRef.current || !booking) return;
+    detailsDefaultedRef.current = true;
+    if (booking.status !== "open") setDetailsOpen(true);
+  }, [booking]);
+
+  const [unseenOffers, setUnseenOffers] = useState(0);
+  const seenMarkedRef = useRef(false);
+  useEffect(() => {
+    if (seenMarkedRef.current || !id || pendingOffers.length === 0) return;
+    seenMarkedRef.current = true;
+    (async () => {
+      const key = `dalconnect.seenOffers.${id}`;
+      let since = 0;
+      try {
+        const raw = await AsyncStorage.getItem(key);
+        if (raw) since = new Date(raw).getTime();
+      } catch {
+        // storage unavailable — treat everything as new rather than nothing
+      }
+      const times = pendingOffers.map((o) => new Date(o.created_at).getTime());
+      setUnseenOffers(times.filter((ts) => ts > since).length);
+      const newest = Math.max(...times);
+      if (Number.isFinite(newest)) {
+        AsyncStorage.setItem(key, new Date(newest).toISOString()).catch(() => {});
+      }
+    })();
+  }, [id, pendingOffers]);
+
   const declineOffer = useCallback(
     async (offer: QuoteOffer) => {
       if (busyOfferId) return;
@@ -369,18 +416,23 @@ export default function BookingDetail() {
     load();
   };
 
-  const openChat = async () => {
-    if (!booking?.professional_id || !session?.user.id || chatLoading) return;
-    setChatLoading(true);
-    try {
-      const convId = await getOrCreateConversation(booking.customer_id, booking.professional_id);
-      router.push(`/chat/${convId}` as never);
-    } catch {
-      toast.error(t("error"));
-    } finally {
-      setChatLoading(false);
-    }
-  };
+  const openChatWith = useCallback(
+    async (professionalId: string | null | undefined) => {
+      if (!professionalId || !booking || chatLoading) return;
+      setChatLoading(true);
+      try {
+        const convId = await getOrCreateConversation(booking.customer_id, professionalId);
+        router.push(`/chat/${convId}` as never);
+      } catch {
+        toast.error(t("error"));
+      } finally {
+        setChatLoading(false);
+      }
+    },
+    [booking, chatLoading, router, t, toast]
+  );
+
+  const openChat = () => openChatWith(booking?.professional_id);
 
   if (loading) return <Loading />;
 
@@ -453,11 +505,14 @@ export default function BookingDetail() {
       >
         {/* ---------- what the job is + where it stands (one card) ---------- */}
         <Card style={{ gap: spacing.md }}>
-          <View style={{ ...ROW, gap: 10, alignItems: "flex-start" }}>
+          {/* compact identity line: what the job is, then trade · urgency on one
+              muted row. It used to be a two-line title with a badge block under
+              it, which ate the top of the screen before saying anything. */}
+          <View style={{ ...ROW, gap: 10, alignItems: "center" }}>
             <View
               style={{
-                width: 44,
-                height: 44,
+                width: 38,
+                height: 38,
                 borderRadius: radius.md,
                 backgroundColor: colors.brandTint,
                 alignItems: "center",
@@ -466,28 +521,22 @@ export default function BookingDetail() {
             >
               <MaterialCommunityIcons
                 name={(booking.category?.icon as MCIName) ?? "tools"}
-                size={22}
+                size={20}
                 color={colors.brand}
               />
             </View>
-            <View style={{ flex: 1, gap: 6 }}>
+            <View style={{ flex: 1, gap: 2 }}>
               <Text
-                numberOfLines={2}
-                style={[RTL_TEXT, { color: colors.text, fontSize: 16.5, fontWeight: "800", lineHeight: 23 }]}
+                numberOfLines={1}
+                style={[RTL_TEXT, { color: colors.text, fontSize: 15.5, fontWeight: "800" }]}
               >
                 {jobTitle}
               </Text>
-              <View style={{ ...ROW, gap: 8 }}>
-                <Badge
-                  label={isUrgent ? t("quoteUrgencyUrgent") : t("quoteUrgencyScheduled")}
-                  tone={isUrgent ? "danger" : "info"}
-                />
-                {categoryName && categoryName !== jobTitle ? (
-                  <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.faint, fontSize: 12, flexShrink: 1 }]}>
-                    {categoryName}
-                  </Text>
-                ) : null}
-              </View>
+              <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.muted, fontSize: 12 }]}>
+                {[categoryName, isUrgent ? t("quoteUrgencyUrgent") : t("quoteUrgencyScheduled")]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </Text>
             </View>
           </View>
 
@@ -548,13 +597,15 @@ export default function BookingDetail() {
                     <View key={key} style={{ flex: 1, alignItems: "center", gap: 6 }}>
                       <View style={{ flexDirection: "row", alignItems: "center", width: "100%" }}>
                         {line(!last, done)}
+                        {/* the current step is the answer to "where am I?", so it
+                            is the only filled, ringed, brand-coloured dot */}
                         <View
                           style={{
-                            width: current ? 18 : 14,
-                            height: current ? 18 : 14,
+                            width: current ? 22 : 14,
+                            height: current ? 22 : 14,
                             borderRadius: radius.full,
                             backgroundColor: done || current ? colors.brand : colors.chip,
-                            borderWidth: current ? 3 : 0,
+                            borderWidth: current ? 4 : 0,
                             borderColor: colors.brandTint,
                             alignItems: "center",
                             justifyContent: "center",
@@ -567,8 +618,8 @@ export default function BookingDetail() {
                       <Text
                         numberOfLines={1}
                         style={{
-                          color: done || current ? colors.text : colors.faint,
-                          fontSize: 10.5,
+                          color: current ? colors.brand : done ? colors.text : colors.faint,
+                          fontSize: current ? 11.5 : 10.5,
                           fontWeight: current ? "800" : "600",
                           textAlign: "center",
                         }}
@@ -705,6 +756,34 @@ export default function BookingDetail() {
         {/* ---------- quotes — the hero while the request is collecting ---------- */}
         {booking.status === "open" ? (
           <View>
+            {/* the main event on this screen, so it gets to announce itself —
+                quietly: a tinted strip, not a slab of brand colour */}
+            {unseenOffers > 0 ? (
+              <View
+                style={{
+                  ...ROW,
+                  alignItems: "center",
+                  gap: 10,
+                  backgroundColor: colors.successTint,
+                  borderRadius: radius.lg,
+                  padding: spacing.md,
+                  marginBottom: spacing.lg,
+                }}
+              >
+                <MaterialCommunityIcons name="party-popper" size={22} color={colors.success} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={[RTL_TEXT, { color: colors.success, fontSize: 14, fontWeight: "800" }]}>
+                    {t("newOffersTitle")}
+                  </Text>
+                  <Text style={[RTL_TEXT, { color: colors.success, fontSize: 12, lineHeight: 17 }]}>
+                    {pendingOffers.length === 1
+                      ? t("newOffersBodyOne")
+                      : t("newOffersBody", { n: pendingOffers.length })}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
             <SectionHeader title={t("quotesTitle", { n: pendingOffers.length })} />
             {pendingOffers.length === 0 ? (
               <View style={{ gap: spacing.md }}>
@@ -728,8 +807,9 @@ export default function BookingDetail() {
               </View>
             ) : (
               <View style={{ gap: spacing.md }}>
+                {/* one line — by this point the customer knows the job */}
                 <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12, lineHeight: 18 }]}>
-                  {t("quotesCompareHint")}
+                  {t("quotesCompareShort")}
                 </Text>
                 {pendingOffers.map((offer) => (
                   <OfferCard
@@ -739,6 +819,7 @@ export default function BookingDetail() {
                     disabled={busyOfferId !== null && busyOfferId !== offer.id}
                     onAccept={acceptOffer}
                     onDecline={declineOffer}
+                    onChat={(o) => openChatWith(o.professional_id)}
                   />
                 ))}
               </View>
@@ -801,6 +882,38 @@ export default function BookingDetail() {
                 ) : null}
               </View>
             ) : null}
+
+            {/* Editing belongs here, right after the quotes: seeing what people
+                offered is exactly when you realise the description was thin.
+                A light card, not a button competing with "accept". */}
+            <Pressable
+              onPress={() => router.push(`/create-booking?editId=${booking.id}` as never)}
+              style={({ pressed }) => [
+                {
+                  ...ROW,
+                  alignItems: "center",
+                  gap: spacing.md,
+                  marginTop: spacing.lg,
+                  backgroundColor: colors.card,
+                  borderRadius: radius.lg,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  padding: spacing.md,
+                },
+                pressed ? { opacity: 0.75 } : null,
+              ]}
+            >
+              <Ionicons name="create-outline" size={19} color={colors.brand} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[RTL_TEXT, { color: colors.text, fontSize: 13.5, fontWeight: "700" }]}>
+                  {t("editPromptTitle")}
+                </Text>
+                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 11.5, lineHeight: 16 }]}>
+                  {t("editPromptBody")}
+                </Text>
+              </View>
+              <Ionicons name="chevron-back" size={15} color={colors.faint} />
+            </Pressable>
           </View>
         ) : null}
 
@@ -840,17 +953,64 @@ export default function BookingDetail() {
           </View>
         ) : null}
 
-        {/* ---------- the details the customer already typed: they recede ---------- */}
+        {/* ---------- what the customer already typed: it recedes ----------
+             While quotes are the job of this screen, the request itself is
+             reference material — two lines and a tap. Once a professional is
+             chosen there's nothing to compare any more, so it opens by default. */}
         <View>
-          <SectionHeader title={t("detailsTitle")} />
+          <SectionHeader title={t("requestDetailsTitle")} />
           <Card style={{ gap: spacing.md }}>
             {booking.description ? (
-              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 13.5, lineHeight: 21 }]}>
+              <Text
+                numberOfLines={detailsOpen ? undefined : 2}
+                style={[RTL_TEXT, { color: colors.text, fontSize: 13.5, lineHeight: 21 }]}
+              >
                 {booking.description}
               </Text>
             ) : null}
 
-            {booking.photos.length > 0 ? (
+            {/* the one-line summary that stands in for the collapsed body */}
+            {!detailsOpen ? (
+              <View style={{ ...ROW, alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                {booking.city || booking.address ? (
+                  <View style={{ ...ROW, alignItems: "center", gap: 5 }}>
+                    <Ionicons name="location-outline" size={13} color={colors.faint} />
+                    <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.muted, fontSize: 12 }]}>
+                      {[booking.city ? loc(booking.city, "name") : null, booking.address || null]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </Text>
+                  </View>
+                ) : null}
+                <View style={{ ...ROW, alignItems: "center", gap: 5 }}>
+                  <Ionicons name="time-outline" size={13} color={colors.faint} />
+                  <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.muted, fontSize: 12 }]}>
+                    {booking.scheduled_at ? formatDateTime(booking.scheduled_at, lang) : t("asap")}
+                  </Text>
+                </View>
+                {booking.photos.length > 0 ? (
+                  <View style={{ ...ROW, alignItems: "center", gap: 5 }}>
+                    <Ionicons name="image-outline" size={13} color={colors.faint} />
+                    <Text style={[MONEY_TEXT, { color: colors.muted, fontSize: 12 }]}>
+                      {booking.photos.length}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            <Pressable
+              onPress={() => setDetailsOpen((v) => !v)}
+              hitSlop={6}
+              style={({ pressed }) => ({ ...ROW, gap: 5, alignItems: "center", opacity: pressed ? 0.6 : 1 })}
+            >
+              <Text style={{ color: colors.brand, fontSize: 12.5, fontWeight: "700" }}>
+                {detailsOpen ? t("hideFullDetails") : t("showFullDetails")}
+              </Text>
+              <Ionicons name={detailsOpen ? "chevron-up" : "chevron-down"} size={14} color={colors.brand} />
+            </Pressable>
+
+            {detailsOpen && booking.photos.length > 0 ? (
               <ScrollView
                 ref={photosRef}
                 horizontal
@@ -870,9 +1030,12 @@ export default function BookingDetail() {
               </ScrollView>
             ) : null}
 
-            {hasJobBody ? <View style={{ height: 1, backgroundColor: colors.hairline }} /> : null}
+            {detailsOpen && hasJobBody ? (
+              <View style={{ height: 1, backgroundColor: colors.hairline }} />
+            ) : null}
 
-            {booking.address || booking.city || (booking.lat != null && booking.lng != null) ? (
+            {detailsOpen &&
+            (booking.address || booking.city || (booking.lat != null && booking.lng != null)) ? (
               <View style={{ ...ROW, gap: 8, alignItems: "flex-start" }}>
                 <Ionicons name="location-outline" size={16} color={colors.faint} style={{ marginTop: 2 }} />
                 <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, flex: 1, lineHeight: 19 }]}>
@@ -897,14 +1060,16 @@ export default function BookingDetail() {
               </View>
             ) : null}
 
-            <View style={{ ...ROW, gap: 8 }}>
-              <Ionicons name="time-outline" size={16} color={colors.faint} />
-              <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, flex: 1 }]}>
-                {`${t("scheduledFor")}: ${
-                  booking.scheduled_at ? formatDateTime(booking.scheduled_at, lang) : t("asap")
-                }`}
-              </Text>
-            </View>
+            {detailsOpen ? (
+              <View style={{ ...ROW, gap: 8 }}>
+                <Ionicons name="time-outline" size={16} color={colors.faint} />
+                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, flex: 1 }]}>
+                  {`${t("scheduledFor")}: ${
+                    booking.scheduled_at ? formatDateTime(booking.scheduled_at, lang) : t("asap")
+                  }`}
+                </Text>
+              </View>
+            ) : null}
 
             {/* money summary: agreed range / final price, plus the request fee.
                 A zero fee renders nothing — "₪0" would only confuse. */}
@@ -998,17 +1163,8 @@ export default function BookingDetail() {
             </Pressable>
           ) : null}
 
-          {/* Editing is only honest while the request is still open: once a quote
-              is accepted, the professional priced the job as it was written. */}
-          {booking.status === "open" ? (
-            <QuietAction
-              icon="create-outline"
-              label={t("editBooking")}
-              color={colors.brand}
-              onPress={() => router.push(`/create-booking?editId=${booking.id}` as never)}
-            />
-          ) : null}
-
+          {/* editing lives up with the quotes now — one entry point, at the
+              moment the customer actually realises they want it */}
           {canCancel ? (
             <QuietAction
               icon="close-circle-outline"

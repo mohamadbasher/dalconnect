@@ -138,10 +138,6 @@ export const booking: Dict = {
 
   // ----- quotes (request → price-range offers → contact reveal) -----
   quotesTitle: { ar: "عروض الأسعار ({n})", he: "הצעות מחיר ({n})" },
-  quotesCompareHint: {
-    ar: "قارن بين العروض واختر الأنسب لك — يظهر رقم هاتف المهني فور قبولك عرضه",
-    he: "השוו בין ההצעות ובחרו את המתאימה לכם — מספר הטלפון של בעל המקצוע יופיע מיד לאחר הקבלה",
-  },
   quotesDeclinedTitle: { ar: "عروض رفضتها ({n})", he: "הצעות שדחיתם ({n})" },
   quotesDeclinedHint: {
     ar: "هذه العروض لم تعد سارية، لكن طلبك ما زال مفتوحاً ويمكن أن تصلك عروض جديدة",
@@ -180,6 +176,37 @@ export const booking: Dict = {
   quoteCallNow: { ar: "اتصل الآن", he: "התקשרו עכשיו" },
   quoteWhatsApp: { ar: "مراسلة على واتساب", he: "הודעה בווטסאפ" },
   quoteChatInApp: { ar: "المراسلة داخل التطبيق", he: "התכתבות באפליקציה" },
+  quoteChatShort: { ar: "دردشة", he: "צ׳אט" },
+  quoteAvailableNow: { ar: "متاح الآن", he: "זמין עכשיו" },
+  quoteReviewsCount: { ar: "{n} تقييم", he: "{n} ביקורות" },
+  quoteMoreDetails: { ar: "تفاصيل كاملة عن المهني", he: "פרטים מלאים על בעל המקצוע" },
+  quoteLessDetails: { ar: "إخفاء التفاصيل", he: "הסתרת הפרטים" },
+  quoteMoreActions: { ar: "خيارات إضافية", he: "אפשרויות נוספות" },
+  quoteProProfile: { ar: "صفحة المهني", he: "עמוד בעל המקצוע" },
+  // The banner. Only shown for quotes that arrived since this screen was last
+  // opened, so it stays an event rather than a permanent decoration.
+  newOffersTitle: { ar: "وصلك عرض جديد!", he: "התקבלה הצעה חדשה!" },
+  newOffersBody: {
+    ar: "عندك {n} عروض من مهنيين بمنطقتك — قارن واختار",
+    he: "יש לכם {n} הצעות מבעלי מקצוע באזורכם — השוו ובחרו",
+  },
+  newOffersBodyOne: {
+    ar: "وصلك عرض من مهني بمنطقتك",
+    he: "התקבלה הצעה מבעל מקצוע באזורכם",
+  },
+  quotesCompareShort: {
+    ar: "قارن بين العروض واختار الأنسب إلك",
+    he: "השוו בין ההצעות ובחרו את המתאימה לכם",
+  },
+  // ----- request details (compact) -----
+  requestDetailsTitle: { ar: "تفاصيل الطلب", he: "פרטי הבקשה" },
+  showFullDetails: { ar: "اعرض كل التفاصيل", he: "הצגת כל הפרטים" },
+  hideFullDetails: { ar: "إخفاء التفاصيل", he: "הסתרת הפרטים" },
+  editPromptTitle: { ar: "بدك تغيّر إشي؟", he: "רוצים לשנות משהו?" },
+  editPromptBody: {
+    ar: "لسا بتقدر تعدّل الطلب — الوصف · الصور · الموعد · الموقع",
+    he: "עדיין אפשר לערוך את הבקשה — תיאור · תמונות · מועד · מיקום",
+  },
   quoteWhatsAppPrefill: {
     ar: "مرحباً، أنا صاحب طلب «{title}» عبر تطبيق دال كونكت",
     he: "שלום, אני שלחתי את הבקשה «{title}» באפליקציית דל קונקט",
@@ -195,7 +222,6 @@ export const booking: Dict = {
   quoteServiceFee: { ar: "رسوم نشر الطلب: {amount}", he: "עמלת פרסום הבקשה: {amount}" },
   quoteUrgencyUrgent: { ar: "عاجل — اليوم", he: "דחוף — היום" },
   quoteUrgencyScheduled: { ar: "بموعد محدد", he: "במועד מתוכנן" },
-  detailsTitle: { ar: "التفاصيل", he: "פרטים" },
   scheduledFor: { ar: "الموعد المفضل", he: "מועד מועדף" },
   openInMaps: { ar: "افتح في الخرائط", he: "פתיחה במפות" },
   locationOnMap: { ar: "موقع محدد على الخريطة", he: "מיקום מסומן במפה" },
