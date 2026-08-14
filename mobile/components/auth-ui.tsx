@@ -652,26 +652,36 @@ export function FieldCard({
           borderWidth: 1,
           borderColor: error ? colors.danger : colors.border,
           paddingHorizontal: 16,
-          paddingVertical: 13,
+          paddingVertical: 12,
           ...shadows.card,
         }}
       >
-        {/* label + value stack (right side in RTL) */}
-        <View style={{ flex: 1, gap: 3 }}>
-          <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5 }]}>{label}</Text>
-          <View style={{ ...ROW, gap: 10, alignItems: "center" }}>
-            <TextInput
-              placeholderTextColor={colors.faint}
-              {...props}
-              style={[
-                RTL_INPUT,
-                { flex: 1, fontSize: 16, color: colors.text, padding: 0, minHeight: 24 },
-                inputStyle,
-              ]}
-            />
-            {trailing}
-          </View>
+        {/* Label + field. The input is a direct child with a fixed height:
+            nesting it inside another flex row let its height collapse, which
+            hid what was being typed. */}
+        <View style={{ flex: 1 }}>
+          <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5, marginBottom: 2 }]}>
+            {label}
+          </Text>
+          <TextInput
+            placeholderTextColor={colors.faint}
+            {...props}
+            style={[
+              RTL_INPUT,
+              {
+                height: 26,
+                fontSize: 16,
+                color: colors.text,
+                paddingVertical: 0,
+                paddingHorizontal: 0,
+                includeFontPadding: false,
+              },
+              inputStyle,
+            ]}
+          />
         </View>
+
+        {trailing}
 
         {/* short rule, not a full-height wall — it only has to separate */}
         <View style={{ width: 1, height: 30, backgroundColor: colors.hairline }} />
