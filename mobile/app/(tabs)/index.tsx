@@ -24,7 +24,7 @@ import { useTheme, radius, spacing } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { fetchCategories, popularCategories } from "../../lib/refdata";
-import { STATUS_KEY, STATUS_TONE } from "../../lib/format";
+import { STATUS_KEY, STATUS_TONE, formatTime } from "../../lib/format";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
 import {
   Badge,
@@ -34,6 +34,7 @@ import {
   SectionHeader,
   SkeletonList,
   pressCard,
+  pressCta,
 } from "../../components/ui";
 import type { Banner, Booking, Category } from "../../lib/types";
 
@@ -45,6 +46,51 @@ function safeIcon(icon?: string | null): keyof typeof MaterialCommunityIcons.gly
 }
 
 const ACTIVE_STATUSES = ["open", "pending", "accepted", "on_the_way", "in_progress"];
+
+// ---------- the helper card's mark ----------
+// Drawn rather than shipped as a PNG: it has to recolour with the theme (this
+// card sits on brandTint in light and on a dark tint at night), it stays sharp
+// at any density, and it adds nothing to the bundle.
+function HelperMark() {
+  const { colors, shadows } = useTheme();
+  return (
+    <View style={{ width: 76, height: 72 }}>
+      {/* the house — the job */}
+      <View
+        style={{
+          position: "absolute",
+          right: 4,
+          bottom: 0,
+          width: 62,
+          height: 62,
+          borderRadius: radius.xl,
+          backgroundColor: colors.card,
+          alignItems: "center",
+          justifyContent: "center",
+          ...shadows.card,
+        }}
+      >
+        <MaterialCommunityIcons name="home-variant-outline" size={30} color={colors.brand} />
+      </View>
+      {/* the question — overlapping, so the two read as one object */}
+      <View
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 30,
+          height: 30,
+          borderRadius: radius.full,
+          backgroundColor: colors.brand,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <MaterialCommunityIcons name="chat-question-outline" size={16} color={colors.onBrand} />
+      </View>
+    </View>
+  );
+}
 
 // ---------- banners carousel (auto-scroll; RTL: `inverted` starts from the right) ----------
 function BannerCarousel({ banners, width }: { banners: Banner[]; width: number }) {
@@ -107,7 +153,7 @@ function BannerCarousel({ banners, width }: { banners: Banner[]; width: number }
 
 export default function HomeScreen() {
   const { colors, shadows } = useTheme();
-  const { t, loc } = useI18n();
+  const { t, loc, lang } = useI18n();
   const { session } = useAuth();
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -127,7 +173,7 @@ export default function HomeScreen() {
     if (!uid) return;
     const { data, error: err } = await supabase
       .from("bookings")
-      .select("*, category:categories(*)")
+      .select("*, category:categories(*), city:cities(*)")
       .eq("customer_id", uid)
       .in("status", ACTIVE_STATUSES)
       .order("created_at", { ascending: false })
@@ -226,52 +272,7 @@ export default function HomeScreen() {
       }
       showsVerticalScrollIndicator={false}
     >
-      {/* 1 — the live request: one line of context + its status, nothing more */}
-      {activeBooking ? (
-        <Pressable
-          onPress={() => router.push(`/booking/${activeBooking.id}`)}
-          style={({ pressed }) => [
-            {
-              ...ROW,
-              gap: spacing.md,
-              backgroundColor: colors.card,
-              borderRadius: radius.lg,
-              padding: spacing.md,
-              ...shadows.card,
-            },
-            pressed ? pressCard : null,
-          ]}
-        >
-          <View
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: radius.tile,
-              backgroundColor: colors.brandTint,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <MaterialCommunityIcons name={safeIcon(activeBooking.category?.icon)} size={22} color={colors.brand} />
-          </View>
-
-          <View style={{ flex: 1, gap: 3 }}>
-            <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 15, fontWeight: "800" }]}>
-              {activeBooking.category ? loc(activeBooking.category, "name") : activeBooking.title}
-            </Text>
-            <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5 }]}>
-              {activeContext(activeBooking)}
-            </Text>
-          </View>
-
-          <Badge label={t(STATUS_KEY[activeBooking.status])} tone={STATUS_TONE[activeBooking.status]} />
-          {/* row-reverse puts this last child on the visual left — "chevron-back"
-              points left, i.e. forward in RTL */}
-          <Ionicons name="chevron-back" size={16} color={colors.faint} />
-        </Pressable>
-      ) : null}
-
-      {/* 2 — read-only search pill → /search (finds services, never people) */}
+      {/* 1 — read-only search pill → /search (finds services, never people) */}
       <Pressable
         onPress={() => router.push("/search")}
         style={({ pressed }) => [
@@ -293,7 +294,7 @@ export default function HomeScreen() {
         </Text>
       </Pressable>
 
-      {/* 3 — banners (renders nothing at all when there are none) */}
+      {/* 2 — banners (renders nothing at all when there are none) */}
       {banners.length > 0 ? <BannerCarousel banners={banners} width={bannerW} /> : null}
 
       {/* the grid failed to load — the only thing worth retrying */}
@@ -304,7 +305,7 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      {/* 4 — the hero: the most-requested trades, everything else one tap away.
+      {/* 3 — the hero: the most-requested trades, everything else one tap away.
              Showing all 32 at once was a wall of choice. */}
       <View>
         <SectionHeader title={t("homePopularTitle")} />
@@ -399,6 +400,145 @@ export default function HomeScreen() {
           </Pressable>
         ) : null}
       </View>
+
+      {/* 4 — for the customer who can't name the trade. The grid asks a question
+             someone whose kitchen is flooding can't answer; this one takes the
+             problem in their own words and names the trade for them. */}
+      <View
+        style={{
+          backgroundColor: colors.brandTint,
+          borderRadius: radius.xl,
+          padding: spacing.lg,
+          gap: spacing.md,
+        }}
+      >
+        <View style={{ ...ROW, alignItems: "center", gap: spacing.md }}>
+          <View style={{ flex: 1, gap: 6 }}>
+            <Text style={[RTL_TEXT, { color: colors.text, fontSize: 17.5, fontWeight: "800" }]}>
+              {t("homeAiTitle")}
+            </Text>
+            <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, lineHeight: 19 }]}>
+              {t("homeAiSubtitle")}
+            </Text>
+          </View>
+          <HelperMark />
+        </View>
+
+        <Pressable
+          onPress={() => router.push("/quick-request")}
+          style={({ pressed }) => [
+            {
+              ...ROW,
+              alignItems: "center",
+              justifyContent: "center",
+              gap: spacing.sm,
+              backgroundColor: colors.brand,
+              borderRadius: radius.full,
+              paddingVertical: 14,
+              ...shadows.cta,
+            },
+            pressed ? pressCta : null,
+          ]}
+        >
+          <MaterialCommunityIcons name="star-four-points" size={17} color={colors.onBrand} />
+          <Text style={{ color: colors.onBrand, fontSize: 15, fontWeight: "800" }}>
+            {t("homeAiCta")}
+          </Text>
+          <Ionicons name="chevron-back" size={16} color={colors.onBrand} />
+        </Pressable>
+      </View>
+
+      {/* 5 — the live request. It sits last on purpose: someone with a job in
+             flight opens the app to check on it, and the tail of the screen is
+             where the eye lands after scrolling past what it already knows. */}
+      {activeBooking ? (
+        <View>
+          <SectionHeader title={t("homeMyRequest")} />
+          <Pressable
+            onPress={() => router.push(`/booking/${activeBooking.id}`)}
+            style={({ pressed }) => [
+              {
+                backgroundColor: colors.card,
+                borderRadius: radius.lg,
+                padding: spacing.md,
+                gap: spacing.md,
+                ...shadows.card,
+              },
+              pressed ? pressCard : null,
+            ]}
+          >
+            <View style={{ ...ROW, alignItems: "center", gap: spacing.md }}>
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: radius.tile,
+                  backgroundColor: colors.brandTint,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <MaterialCommunityIcons
+                  name={safeIcon(activeBooking.category?.icon)}
+                  size={22}
+                  color={colors.brand}
+                />
+              </View>
+
+              <View style={{ flex: 1, gap: 3 }}>
+                <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 15.5, fontWeight: "800" }]}>
+                  {activeBooking.category ? loc(activeBooking.category, "name") : activeBooking.title}
+                </Text>
+                <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5 }]}>
+                  {activeContext(activeBooking)}
+                </Text>
+              </View>
+
+              <Badge label={t(STATUS_KEY[activeBooking.status])} tone={STATUS_TONE[activeBooking.status]} />
+            </View>
+
+            {/* where and when — only the parts we actually have */}
+            {activeBooking.city || activeBooking.address || activeBooking.created_at ? (
+              <View style={{ ...ROW, alignItems: "center", gap: spacing.lg }}>
+                {activeBooking.city || activeBooking.address ? (
+                  <View style={{ ...ROW, alignItems: "center", gap: 5, flex: 1 }}>
+                    <Ionicons name="location-outline" size={14} color={colors.faint} />
+                    <Text numberOfLines={1} style={[RTL_TEXT, { flex: 1, color: colors.muted, fontSize: 12 }]}>
+                      {activeBooking.city ? loc(activeBooking.city, "name") : activeBooking.address}
+                    </Text>
+                  </View>
+                ) : null}
+                <View style={{ ...ROW, alignItems: "center", gap: 5 }}>
+                  <Ionicons name="calendar-outline" size={14} color={colors.faint} />
+                  {/* dates stay LTR — an RTL run flips 12.05 to 05.12 */}
+                  <Text style={{ color: colors.muted, fontSize: 12, writingDirection: "ltr" }}>
+                    {formatTime(activeBooking.created_at, lang)}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
+            <View style={ROW}>
+              <View
+                style={{
+                  ...ROW,
+                  alignItems: "center",
+                  gap: 6,
+                  backgroundColor: colors.brandTint,
+                  borderRadius: radius.full,
+                  paddingHorizontal: spacing.md,
+                  paddingVertical: 8,
+                }}
+              >
+                <Text style={{ color: colors.brand, fontSize: 12.5, fontWeight: "700" }}>
+                  {t("homeTrackCta")}
+                </Text>
+                <Ionicons name="chevron-back" size={13} color={colors.brand} />
+              </View>
+            </View>
+          </Pressable>
+        </View>
+      ) : null}
     </ScrollView>
   );
 }

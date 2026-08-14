@@ -66,7 +66,9 @@ export default function CreateBooking() {
   const toast = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ categoryId?: string }>();
+  // `description` arrives pre-filled from the quick-request flow, where the
+  // customer has already typed the problem out once.
+  const params = useLocalSearchParams<{ categoryId?: string; description?: string }>();
 
   // reference data
   const [categories, setCategories] = useState<Category[] | null>(null);
@@ -79,7 +81,7 @@ export default function CreateBooking() {
     params.categoryId ? Number(params.categoryId) || null : null
   );
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [description, setDescription] = useState(params.description ?? "");
   const [photos, setPhotos] = useState<string[]>([]);
   const [cityId, setCityId] = useState<number | null>(null);
   const [address, setAddress] = useState("");

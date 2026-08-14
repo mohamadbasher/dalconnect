@@ -144,6 +144,19 @@ never from browsing.
     false so no backfill is needed), but no OTP is sent. Deferred by decision — wire up
     Supabase phone auth with an SMS provider (Twilio/Vonage, roughly ₪0.10–0.20 per
     message) before real users.
+14. **The "quick request" matcher runs on keywords, not AI, unless you turn AI on.**
+    Home's *"don't know which service you need?"* card takes a free-text problem
+    ("there's a leak under the sink") and names the trade. Two engines live in
+    `mobile/lib/suggest.ts`: a local Arabic+Hebrew keyword matcher (free, instant,
+    offline, **34/34** on the phrasings in `scripts/test-suggest.mjs`) and the
+    `suggest-category` edge function, which asks Claude and handles paraphrase and
+    typos the keyword table can't. The edge function is **written but not deployed**
+    and the app never calls it unless `EXPO_PUBLIC_AI_SUGGEST=1`. To enable it:
+    `supabase secrets set ANTHROPIC_API_KEY=...` → `supabase functions deploy
+    suggest-category` → set the flag. Every AI failure (no key, not deployed, offline,
+    8s timeout) silently falls back to keywords — verified in the same test — so the
+    customer always gets an answer. **Editing the keyword table? Run
+    `node scripts/test-suggest.mjs` after.**
 
 ---
 
@@ -204,6 +217,9 @@ not part of the app runtime:
 - `seed-users.mjs` / `seed-demo-pros.mjs` — create the demo accounts above.
 - `smoke-test.mjs` — end-to-end check (signup → RLS → RPCs → booking) against the live
   backend; creates and deletes its own throwaway user.
+- `test-suggest.mjs` — the one that needs **no** backend: compiles `lib/suggest.ts` and
+  runs real customer phrasings (both languages) through the quick-request matcher, plus
+  every AI failure mode. Run it after touching the keyword table.
 
 ## v1 limitations / known gaps
 
