@@ -74,6 +74,12 @@ export interface Profile {
   provider_no: string | null;
   /** groundwork for SMS verification — no OTP is sent yet */
   phone_verified: boolean;
+  /** the user's real contact address — NOT the synthetic auth email */
+  email?: string | null;
+  /** an uploaded photo waiting for an admin to look at it */
+  pending_avatar_url?: string | null;
+  /** none | pending | approved | rejected — only an admin moves it off 'pending' */
+  avatar_status?: "none" | "pending" | "approved" | "rejected";
   created_at: string;
 }
 

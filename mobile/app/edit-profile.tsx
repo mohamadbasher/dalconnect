@@ -1,11 +1,17 @@
-// Edit profile — avatar, full name, city. Phone is the login and stays read-only.
-import React, { useEffect, useMemo, useState } from "react";
+// Edit profile — photo, name, email. Phone is the login and stays read-only.
+//
+// City used to live here. It doesn't any more: an account has no single city,
+// a REQUEST does, and saved addresses now carry that per place. Asking once at
+// signup and then quietly using a stale answer was worse than not asking.
+//
+// A new photo is not shown to anyone until an admin has looked at it — see
+// migration 20260714000015. `avatar_url` is admin-only at the database level,
+// so this screen writes `pending_avatar_url` and nothing else.
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -22,70 +28,66 @@ import { useI18n } from "../lib/i18n";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { uploadImage } from "../lib/upload";
-import { fetchCities } from "../lib/refdata";
-import { ROW, RTL_TEXT } from "../lib/rtl";
-import { Avatar, Button, Input, Loading, SearchBar } from "../components/ui";
-import type { City } from "../lib/types";
+import { ROW, RTL_TEXT, RTL_INPUT } from "../lib/rtl";
+import { Avatar, Button, Input, Loading } from "../components/ui";
+import { useToast } from "../components/Toast";
+
+/** Deliberately permissive: something@something.tld. Anything stricter starts
+ *  rejecting real addresses, and the address is only ever confirmed by mail. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export default function EditProfileScreen() {
   const { colors, shadows } = useTheme();
-  const { t, lang, loc } = useI18n();
+  const { t } = useI18n();
   const { session, profile, refresh } = useAuth();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const toast = useToast();
 
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
-  const [cityId, setCityId] = useState<number | null>(profile?.city_id ?? null);
+  const [email, setEmail] = useState(profile?.email ?? "");
   const [nameError, setNameError] = useState("");
+  const [emailError, setEmailError] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-
-  const [cities, setCities] = useState<City[]>([]);
-  const [citySheet, setCitySheet] = useState(false);
-  const [citySearch, setCitySearch] = useState("");
+  const [sourceSheet, setSourceSheet] = useState(false);
 
   useEffect(() => {
     if (profile) {
       setFullName(profile.full_name);
-      setCityId(profile.city_id);
+      setEmail(profile.email ?? "");
     }
   }, [profile?.id]);
 
-  useEffect(() => {
-    fetchCities().then(setCities).catch(() => {});
-  }, []);
-
-  const filteredCities = useMemo(() => {
-    const q = citySearch.trim();
-    if (!q) return cities;
-    return cities.filter((c) => c.name_ar.includes(q) || c.name_he.includes(q));
-  }, [cities, citySearch]);
-
-  const selectedCity = cities.find((c) => c.id === cityId) ?? null;
-
   if (!profile || !session?.user) return <Loading />;
 
-  const pickAvatar = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
-    });
-    if (result.canceled || !result.assets[0]) return;
+  /**
+   * Has anything actually changed? The save button stays inert until it has,
+   * so the screen never invites a write that would do nothing — and a tap that
+   * appears to succeed while changing nothing is its own small confusion.
+   */
+  const dirty =
+    fullName.trim() !== (profile.full_name ?? "").trim() ||
+    email.trim() !== (profile.email ?? "").trim();
+
+  const uploadFrom = async (uri: string) => {
     setUploading(true);
     try {
       const url = await uploadImage({
         bucket: "avatars",
         userId: session.user.id,
-        localUri: result.assets[0].uri,
+        localUri: uri,
         fileName: `${Date.now()}.jpg`,
       });
-      const { error } = await supabase.from("profiles").update({ avatar_url: url }).eq("id", session.user.id);
+      // pending_avatar_url, never avatar_url: the guard in the database rejects
+      // the latter from anyone but an admin, which is what makes review real.
+      const { error } = await supabase
+        .from("profiles")
+        .update({ pending_avatar_url: url, avatar_status: "pending" })
+        .eq("id", session.user.id);
       if (error) throw error;
       await refresh();
+      toast.success(t("avatarSubmitted"));
     } catch {
       Alert.alert(t("error"), t("editUploadError"));
     } finally {
@@ -93,18 +95,58 @@ export default function EditProfileScreen() {
     }
   };
 
-  const save = async () => {
-    const name = fullName.trim();
-    if (!name) {
-      setNameError(t("editFullNameRequired"));
+  const takePhoto = async () => {
+    setSourceSheet(false);
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(t("avatarCameraDenied"));
       return;
     }
+    const res = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (res.canceled || !res.assets?.[0]) return;
+    uploadFrom(res.assets[0].uri);
+  };
+
+  const chooseFromLibrary = async () => {
+    setSourceSheet(false);
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return;
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (res.canceled || !res.assets?.[0]) return;
+    uploadFrom(res.assets[0].uri);
+  };
+
+  const save = async () => {
+    const name = fullName.trim();
+    const mail = email.trim();
+    let bad = false;
+    if (!name) {
+      setNameError(t("editFullNameRequired"));
+      bad = true;
+    }
+    // Empty is fine — the address is optional. Wrong is not.
+    if (mail && !EMAIL_RE.test(mail)) {
+      setEmailError(t("editEmailInvalid"));
+      bad = true;
+    }
+    if (bad) return;
+
     setNameError("");
+    setEmailError("");
     setSaving(true);
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ full_name: name, city_id: cityId })
+        .update({ full_name: name, email: mail || null })
         .eq("id", session.user.id);
       if (error) throw error;
       await refresh();
@@ -117,9 +159,10 @@ export default function EditProfileScreen() {
     }
   };
 
+  const status = profile.avatar_status ?? "none";
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      {/* header */}
       <View
         style={{
           ...ROW,
@@ -145,10 +188,17 @@ export default function EditProfileScreen() {
           contentContainerStyle={{ padding: spacing.lg, gap: spacing.xl, paddingBottom: spacing.xxl }}
           keyboardShouldPersistTaps="handled"
         >
-          {/* avatar picker */}
-          <View style={{ alignItems: "center" }}>
-            <Pressable onPress={pickAvatar} disabled={uploading}>
-              <Avatar uri={profile.avatar_url} name={profile.full_name} size={104} />
+          {/* photo */}
+          <View style={{ alignItems: "center", gap: spacing.md }}>
+            <Pressable onPress={() => setSourceSheet(true)} disabled={uploading}>
+              {/* While a submission is pending, show the submitted photo — it's
+                  what the person just chose, and showing the old one would read
+                  as "my upload didn't work". */}
+              <Avatar
+                uri={status === "pending" ? profile.pending_avatar_url : profile.avatar_url}
+                name={profile.full_name}
+                size={104}
+              />
               {uploading ? (
                 <View
                   style={{
@@ -185,9 +235,51 @@ export default function EditProfileScreen() {
                 <Ionicons name="camera" size={16} color={colors.onBrand} />
               </View>
             </Pressable>
+
+            {status === "pending" ? (
+              <View
+                style={{
+                  backgroundColor: colors.warnTint,
+                  borderRadius: radius.md,
+                  padding: spacing.md,
+                  gap: 3,
+                }}
+              >
+                <View style={{ ...ROW, alignItems: "center", gap: 6 }}>
+                  <Ionicons name="hourglass-outline" size={15} color={colors.warn} />
+                  <Text style={[RTL_TEXT, { color: colors.warn, fontSize: 13, fontWeight: "800" }]}>
+                    {t("avatarPendingTitle")}
+                  </Text>
+                </View>
+                <Text style={[RTL_TEXT, { color: colors.warn, fontSize: 12, lineHeight: 17 }]}>
+                  {t("avatarPendingBody")}
+                </Text>
+              </View>
+            ) : null}
+
+            {status === "rejected" ? (
+              <View
+                style={{
+                  backgroundColor: colors.dangerTint,
+                  borderRadius: radius.md,
+                  padding: spacing.md,
+                  gap: 3,
+                }}
+              >
+                <View style={{ ...ROW, alignItems: "center", gap: 6 }}>
+                  <Ionicons name="close-circle-outline" size={15} color={colors.danger} />
+                  <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 13, fontWeight: "800" }]}>
+                    {t("avatarRejectedTitle")}
+                  </Text>
+                </View>
+                <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12, lineHeight: 17 }]}>
+                  {t("avatarRejectedBody")}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
-          {/* full name */}
+          {/* name */}
           <Input
             label={t("editFullName")}
             value={fullName}
@@ -199,32 +291,23 @@ export default function EditProfileScreen() {
             autoCapitalize="words"
           />
 
-          {/* city picker */}
+          {/* email — replaces city, which belongs to a request, not an account */}
           <View style={{ gap: 6 }}>
-            <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, fontWeight: "600" }]}>{t("city")}</Text>
-            <Pressable
-              onPress={() => setCitySheet(true)}
-              style={{
-                ...ROW,
-                gap: 8,
-                backgroundColor: colors.card,
-                borderWidth: 1.5,
-                borderColor: colors.border,
-                borderRadius: radius.md,
-                paddingHorizontal: 14,
-                paddingVertical: 13,
+            <Input
+              label={`${t("editEmail")} (${t("optional")})`}
+              placeholder={t("editEmailPlaceholder")}
+              value={email}
+              onChangeText={(v) => {
+                setEmail(v);
+                if (emailError) setEmailError("");
               }}
-            >
-              <Text
-                style={[
-                  RTL_TEXT,
-                  { flex: 1, fontSize: 15, color: selectedCity ? colors.text : colors.faint },
-                ]}
-              >
-                {selectedCity ? loc(selectedCity, "name") : t("editChooseCity")}
-              </Text>
-              <Ionicons name="chevron-down" size={18} color={colors.faint} />
-            </Pressable>
+              error={emailError}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoCorrect={false}
+              style={[RTL_INPUT, { writingDirection: "ltr", textAlign: "left" }]}
+            />
+            <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12 }]}>{t("editEmailHint")}</Text>
           </View>
 
           {/* phone (read-only) */}
@@ -248,89 +331,92 @@ export default function EditProfileScreen() {
             <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12 }]}>{t("editPhoneNote")}</Text>
           </View>
 
-          <Button title={t("save")} onPress={save} loading={saving} />
+          <View style={{ gap: 6 }}>
+            <Button title={t("save")} onPress={save} loading={saving} disabled={!dirty || saving} />
+            {!dirty ? (
+              <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12, textAlign: "center" }]}>
+                {t("editNoChanges")}
+              </Text>
+            ) : null}
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* city bottom sheet */}
-      <Modal visible={citySheet} transparent animationType="slide" onRequestClose={() => setCitySheet(false)}>
-        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
-          <Pressable style={{ flex: 1 }} onPress={() => setCitySheet(false)} />
-          <View
+      {/* where should the photo come from? */}
+      {sourceSheet ? (
+        <Pressable
+          onPress={() => setSourceSheet(false)}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: colors.overlay,
+            justifyContent: "flex-end",
+          }}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
             style={{
               backgroundColor: colors.bg,
               borderTopLeftRadius: radius.xl,
               borderTopRightRadius: radius.xl,
-              paddingTop: spacing.md,
-              maxHeight: "72%",
-              paddingBottom: insets.bottom + spacing.md,
+              padding: spacing.lg,
+              paddingBottom: insets.bottom + spacing.lg,
+              gap: spacing.sm,
             }}
           >
-            <View
-              style={{
-                width: 44,
-                height: 5,
-                borderRadius: 3,
-                backgroundColor: colors.border,
-                alignSelf: "center",
-                marginBottom: spacing.md,
-              }}
-            />
-            <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
-              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 17, fontWeight: "800" }]}>
-                {t("editChooseCity")}
-              </Text>
-              <SearchBar value={citySearch} onChangeText={setCitySearch} placeholder={t("editSearchCity")} />
-            </View>
-            <FlatList
-              data={filteredCities}
-              keyExtractor={(c) => String(c.id)}
-              contentContainerStyle={{ padding: spacing.lg, gap: 4 }}
-              keyboardShouldPersistTaps="handled"
-              renderItem={({ item }) => {
-                const active = item.id === cityId;
-                return (
-                  <Pressable
-                    onPress={() => {
-                      setCityId(item.id);
-                      setCitySheet(false);
-                      setCitySearch("");
-                    }}
-                    style={{
-                      ...ROW,
-                      gap: 8,
-                      paddingVertical: 12,
-                      paddingHorizontal: spacing.md,
-                      borderRadius: radius.md,
-                      backgroundColor: active ? colors.brandTint : "transparent",
-                    }}
-                  >
-                    <Text
-                      style={[
-                        RTL_TEXT,
-                        {
-                          flex: 1,
-                          fontSize: 15,
-                          color: active ? colors.brand : colors.text,
-                          fontWeight: active ? "700" : "500",
-                        },
-                      ]}
-                    >
-                      {loc(item, "name")}
-                    </Text>
-                    {active ? <Ionicons name="checkmark-circle" size={19} color={colors.brand} /> : null}
-                  </Pressable>
-                );
-              }}
-              ListEmptyComponent={
-                <Text style={{ color: colors.muted, textAlign: "center", paddingVertical: spacing.xl }}>
-                  {t("noResults")}
+            <Text
+              style={[RTL_TEXT, { color: colors.text, fontSize: 16, fontWeight: "800", marginBottom: spacing.xs }]}
+            >
+              {t("avatarChangePhoto")}
+            </Text>
+
+            {[
+              { icon: "camera-outline" as const, label: t("avatarTakePhoto"), onPress: takePhoto },
+              { icon: "images-outline" as const, label: t("avatarChooseLibrary"), onPress: chooseFromLibrary },
+            ].map((o) => (
+              <Pressable
+                key={o.label}
+                onPress={o.onPress}
+                style={({ pressed }) => ({
+                  ...ROW,
+                  alignItems: "center",
+                  gap: spacing.md,
+                  backgroundColor: colors.card,
+                  borderRadius: radius.md,
+                  padding: spacing.md,
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: radius.md,
+                    backgroundColor: colors.brandTint,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Ionicons name={o.icon} size={18} color={colors.brand} />
+                </View>
+                <Text style={[RTL_TEXT, { flex: 1, color: colors.text, fontSize: 15, fontWeight: "600" }]}>
+                  {o.label}
                 </Text>
-              }
-            />
-          </View>
-        </View>
-      </Modal>
+              </Pressable>
+            ))}
+
+            <Pressable
+              onPress={() => setSourceSheet(false)}
+              style={({ pressed }) => ({ paddingVertical: 12, alignItems: "center", opacity: pressed ? 0.6 : 1 })}
+            >
+              <Text style={{ color: colors.muted, fontSize: 14.5, fontWeight: "700" }}>{t("cancel")}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

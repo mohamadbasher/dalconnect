@@ -13,6 +13,7 @@ const NAV = [
   { href: "/cities", label: S.navCities, icon: "📍" },
   { href: "/reviews", label: S.navReviews, icon: "⭐" },
   { href: "/reports", label: S.navReports, icon: "🚩" },
+  { href: "/avatars", label: S.navAvatars, icon: "🖼️" },
   { href: "/banners", label: S.navBanners, icon: "🖼️" },
   { href: "/notifications", label: S.navNotifications, icon: "🔔" },
   { href: "/legal", label: S.navLegal, icon: "📄" },

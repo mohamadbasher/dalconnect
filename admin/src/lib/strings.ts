@@ -27,6 +27,7 @@ export const S = {
   navCities: "المدن",
   navReviews: "التقييمات",
   navReports: "البلاغات",
+  navAvatars: "صور الملفات",
   navBanners: "الإعلانات",
   navSettings: "الإعدادات",
   navNotifications: "الإشعارات",
@@ -164,6 +165,14 @@ export const S = {
   offerAccepted: "مقبول",
   offerRejected: "مرفوض",
   offerWithdrawn: "مسحوب",
+
+  // avatar review
+  avatarsTitle: "مراجعة صور الملفات الشخصية",
+  avatarsWaiting: "صورة بانتظار المراجعة",
+  avatarsEmpty: "ما في صور بانتظار المراجعة",
+  avatarsApprove: "موافقة",
+  avatarsReject: "رفض",
+  avatarsCurrent: "الصورة الحالية",
 
   // categories
   categoriesTitle: "الفئات",
