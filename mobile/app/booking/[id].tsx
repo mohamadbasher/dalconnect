@@ -200,6 +200,12 @@ export default function BookingDetail() {
   const [cancelVisible, setCancelVisible] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
+  const [confirmDoneVisible, setConfirmDoneVisible] = useState(false);
+  const [confirmingDone, setConfirmingDone] = useState(false);
+  /** true only in the moment right after confirming — swaps the plain "rate"
+   *  button for a fuller thank-you banner. Not persisted: reopening an already-
+   *  completed job later shows the plain button, same as before. */
+  const [justConfirmedDone, setJustConfirmedDone] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
   const [viewerUri, setViewerUri] = useState<string | null>(null);
   // The photo strip is laid out row-reverse, so its "end" is the right edge —
@@ -413,6 +419,33 @@ export default function BookingDetail() {
     }
     setCancelReason("");
     toast.info(t("bookingCancelledToast"));
+    load();
+  };
+
+  /**
+   * The customer's side of "the job is done" — the professional's own
+   * completion flow (job/[id].tsx) still exists and still records the actual
+   * final_price; this is what happens when the CUSTOMER is the one who
+   * notices work has wrapped up. Deliberately sends only `status` — the DB
+   * guard (20260714000009) rejects final_price/commission from this side no
+   * matter what, so there's nothing to gain by asking for them here.
+   */
+  const doConfirmDone = async () => {
+    if (!booking || confirmingDone) return;
+    setConfirmingDone(true);
+    const { error } = await supabase
+      .from("bookings")
+      .update({ status: "completed" })
+      .eq("id", booking.id)
+      .eq("status", booking.status); // someone else may have moved it meanwhile
+    setConfirmingDone(false);
+    setConfirmDoneVisible(false);
+    if (error) {
+      toast.error(t("error"));
+      return;
+    }
+    setJustConfirmedDone(true);
+    toast.success(t("workDoneToast"));
     load();
   };
 
@@ -1121,6 +1154,45 @@ export default function BookingDetail() {
           </Card>
         </View>
 
+        {/* ---------- customer confirms the work is done ----------
+             The professional has their own way to close a job out (with the
+             price they actually charged); this is what happens when the
+             CUSTOMER is the one who notices the work has wrapped up, so a job
+             doesn't sit stuck in "on the way" because the pro forgot to tap
+             their own button. Only appears once someone is actually en route
+             or on site — before that there's nothing to confirm. */}
+        {booking.status === "on_the_way" || booking.status === "in_progress" ? (
+          <Card style={{ gap: spacing.md }}>
+            <View style={{ ...ROW, gap: 10, alignItems: "center" }}>
+              <View
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: radius.md,
+                  backgroundColor: colors.successTint,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <MaterialCommunityIcons name="flag-checkered" size={19} color={colors.success} />
+              </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[RTL_TEXT, { color: colors.text, fontSize: 14.5, fontWeight: "800" }]}>
+                  {t("finishWorkTitle")}
+                </Text>
+                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12, lineHeight: 17 }]}>
+                  {t("finishWorkSubtitle")}
+                </Text>
+              </View>
+            </View>
+            <Button
+              title={t("confirmWorkDone")}
+              icon="check-circle-outline"
+              onPress={() => setConfirmDoneVisible(true)}
+            />
+          </Card>
+        ) : null}
+
         {/* given rating (readonly) — shown as soon as the review row exists,
             even if the trigger hasn't flipped the status to 'rated' yet */}
         {review ? (
@@ -1135,7 +1207,39 @@ export default function BookingDetail() {
         {/* ---------- actions: one loud, the rest quiet ---------- */}
         <View style={{ gap: spacing.xs }}>
           {booking.status === "completed" && booking.professional_id && !review ? (
-            <Button title={t("rateService")} icon="star" onPress={() => setRateVisible(true)} />
+            justConfirmedDone ? (
+              // the moment right after confirming — a fuller thank-you rather
+              // than the same plain button someone sees returning days later
+              <View
+                style={{
+                  backgroundColor: colors.successTint,
+                  borderRadius: radius.lg,
+                  padding: spacing.lg,
+                  gap: 10,
+                  alignItems: "center",
+                }}
+              >
+                <Ionicons name="checkmark-circle" size={30} color={colors.success} />
+                <Text style={{ color: colors.success, fontSize: 15.5, fontWeight: "800", textAlign: "center" }}>
+                  {t("workDoneBannerTitle")}
+                </Text>
+                <Text style={{ color: colors.success, fontSize: 12.5, lineHeight: 18, textAlign: "center" }}>
+                  {t("workDoneBannerBody")}
+                </Text>
+                <Pressable
+                  onPress={() => setRateVisible(true)}
+                  hitSlop={8}
+                  style={({ pressed }) => ({ ...ROW, gap: 5, alignItems: "center", opacity: pressed ? 0.6 : 1 })}
+                >
+                  <Text style={{ color: colors.success, fontSize: 13.5, fontWeight: "800", textDecorationLine: "underline" }}>
+                    {t("goToRating")}
+                  </Text>
+                  <Ionicons name="chevron-back" size={14} color={colors.success} />
+                </Pressable>
+              </View>
+            ) : (
+              <Button title={t("rateService")} icon="star" onPress={() => setRateVisible(true)} />
+            )
           ) : null}
 
           {/* Once the pro is on the job the cancel button is gone; without this the
@@ -1253,6 +1357,48 @@ export default function BookingDetail() {
                 style={{ flex: 1 }}
                 loading={cancelling}
                 onPress={doCancel}
+              />
+            </View>
+          </Card>
+        </View>
+      </Modal>
+
+      {/* confirm-completion modal — same shape as the cancel one: state the
+          consequence, then a calm way back out */}
+      <Modal
+        visible={confirmDoneVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmDoneVisible(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: colors.overlay,
+            alignItems: "center",
+            justifyContent: "center",
+            padding: spacing.xl,
+          }}
+        >
+          <Card style={{ width: "100%", maxWidth: 380, gap: spacing.lg }}>
+            <Text style={[RTL_TEXT, { color: colors.text, fontSize: 17, fontWeight: "800" }]}>
+              {t("confirmWorkDoneTitle")}
+            </Text>
+            <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13.5, lineHeight: 20 }]}>
+              {t("confirmWorkDoneBody")}
+            </Text>
+            <View style={{ ...ROW, gap: 10 }}>
+              <Button
+                title={t("keepBooking")}
+                variant="ghost"
+                style={{ flex: 1 }}
+                onPress={() => setConfirmDoneVisible(false)}
+              />
+              <Button
+                title={t("confirmWorkDone")}
+                style={{ flex: 1 }}
+                loading={confirmingDone}
+                onPress={doConfirmDone}
               />
             </View>
           </Card>
