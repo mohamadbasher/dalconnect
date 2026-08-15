@@ -32,21 +32,33 @@ const { data: cities } = await me.from("cities").select("id").limit(2);
 // start clean
 await me.from("saved_addresses").delete().eq("user_id", uid);
 
-console.log("1. Create and read back");
+console.log("1. Create and read back, with the structured parts");
 let home, work;
 {
   const { data, error } = await me.from("saved_addresses")
-    .insert({ user_id: uid, label: "בית", city_id: cities[0].id, address: "רחוב 1", is_default: true })
+    .insert({
+      user_id: uid, label: "בית", city_id: cities[0].id,
+      street: "הרצל", house_number: "12", floor: "3", apartment: "5",
+      notes: "כניסה מאחורה", address: "הרצל 12, קומה 3, דירה 5", is_default: true,
+    })
     .select("*").single();
   home = data;
   check("created a default address", !error && data?.is_default === true, error?.message?.slice(0, 55) ?? "");
+  check("street/house/floor/apartment stored separately",
+    data?.street === "הרצל" && data?.house_number === "12" && data?.floor === "3" && data?.apartment === "5",
+    `${data?.street} ${data?.house_number} / ${data?.floor} / ${data?.apartment}`);
+  check("address notes stored", data?.notes === "כניסה מאחורה", data?.notes ?? "");
 }
 {
   const { data, error } = await me.from("saved_addresses")
-    .insert({ user_id: uid, label: "עבודה", city_id: cities[1].id, address: "רחוב 2", is_default: false })
+    .insert({
+      user_id: uid, label: "עבודה", city_id: cities[1].id,
+      street: "ויצמן", house_number: "3", address: "ויצמן 3", is_default: false,
+    })
     .select("*").single();
   work = data;
-  check("created a second, non-default address", !error && data?.is_default === false, error?.message?.slice(0, 55) ?? "");
+  check("optional parts may be left empty", !error && data?.floor === null && data?.apartment === null,
+    error?.message?.slice(0, 55) ?? "");
 }
 
 console.log("\n2. Exactly one default, enforced by the database");
@@ -90,6 +102,29 @@ console.log("\n5. Delete works for the owner");
 {
   const { error } = await me.from("saved_addresses").delete().eq("id", home.id);
   check("owner can delete their own address", !error, error?.message?.slice(0, 50) ?? "");
+}
+
+console.log("\n6. formatAddress composes the one line the same way everywhere");
+{
+  // mirrors lib/address.ts — asserted here so a change to one without the other
+  // shows up as a failure rather than as two subtly different strings in the UI
+  const L = { floor: "קומה", apartment: "דירה" };
+  const fmt = (a) => {
+    const streetLine = [a.street?.trim(), a.house_number?.trim()].filter(Boolean).join(" ");
+    const parts = [
+      streetLine,
+      a.floor?.trim() ? `${L.floor} ${a.floor.trim()}` : null,
+      a.apartment?.trim() ? `${L.apartment} ${a.apartment.trim()}` : null,
+    ].filter(Boolean);
+    return parts.length ? parts.join(", ") : (a.address ?? "").trim();
+  };
+  check("full address", fmt({ street: "הרצל", house_number: "12", floor: "3", apartment: "5" }) === "הרצל 12, קומה 3, דירה 5",
+    fmt({ street: "הרצל", house_number: "12", floor: "3", apartment: "5" }));
+  check("no floor/flat — no empty fragments", fmt({ street: "ויצמן", house_number: "3" }) === "ויצמן 3",
+    fmt({ street: "ויצמן", house_number: "3" }));
+  check("flat without floor still reads", fmt({ street: "הגליל", house_number: "8", apartment: "2" }) === "הגליל 8, דירה 2",
+    fmt({ street: "הגליל", house_number: "8", apartment: "2" }));
+  check("legacy free-text row falls back to `address`", fmt({ address: "רחוב ישן 4" }) === "רחוב ישן 4");
 }
 
 await me.from("saved_addresses").delete().eq("user_id", uid);

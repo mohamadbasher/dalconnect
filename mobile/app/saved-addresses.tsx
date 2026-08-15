@@ -28,6 +28,7 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { fetchCities } from "../lib/refdata";
 import { getCurrentPosition } from "../lib/location";
+import { formatAddress, formatFullAddress } from "../lib/address";
 import { ROW, RTL_TEXT } from "../lib/rtl";
 import { Button, EmptyState, Input, Loading, SearchBar, SheetHandle, pressCard } from "../components/ui";
 import { useToast } from "../components/Toast";
@@ -52,10 +53,14 @@ export default function SavedAddressesScreen() {
   const [label, setLabel] = useState("");
   const [cityId, setCityId] = useState<number | null>(null);
   const [street, setStreet] = useState("");
+  const [houseNumber, setHouseNumber] = useState("");
+  const [floor, setFloor] = useState("");
+  const [apartment, setApartment] = useState("");
+  const [notes, setNotes] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [makeDefault, setMakeDefault] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState<{ label?: string; city?: string }>({});
+  const [errors, setErrors] = useState<{ label?: string; city?: string; street?: string; house?: string }>({});
   const [cityModal, setCityModal] = useState(false);
   const [citySearch, setCitySearch] = useState("");
   const [locating, setLocating] = useState(false);
@@ -79,7 +84,13 @@ export default function SavedAddressesScreen() {
     setEditing(a);
     setLabel(a?.label ?? "");
     setCityId(a?.city_id ?? null);
-    setStreet(a?.address ?? "");
+    // `|| a?.address` catches rows saved before the fields were split out —
+    // their whole address sits in the legacy column.
+    setStreet(a?.street || a?.address || "");
+    setHouseNumber(a?.house_number ?? "");
+    setFloor(a?.floor ?? "");
+    setApartment(a?.apartment ?? "");
+    setNotes(a?.notes ?? "");
     setCoords(a?.lat != null && a?.lng != null ? { lat: a.lat, lng: a.lng } : null);
     // Editing the current default shouldn't offer to "make it default" — it is.
     setMakeDefault(a ? a.is_default : items.length === 0);
@@ -128,15 +139,29 @@ export default function SavedAddressesScreen() {
     const errs: typeof errors = {};
     if (!label.trim()) errs.label = t("addrLabelRequired");
     if (cityId === null) errs.city = t("addrCityRequired");
+    // Street and house number are what makes an address findable; floor, flat
+    // and notes only help once someone is already at the door.
+    if (!street.trim()) errs.street = t("addrStreetRequired");
+    if (!houseNumber.trim()) errs.house = t("addrHouseRequired");
     setErrors(errs);
     if (Object.keys(errs).length) return;
 
     setSaving(true);
+    const parts = {
+      street: street.trim(),
+      house_number: houseNumber.trim(),
+      floor: floor.trim() || null,
+      apartment: apartment.trim() || null,
+      notes: notes.trim() || null,
+    };
     const row = {
       user_id: uid,
       label: label.trim(),
       city_id: cityId,
-      address: street.trim(),
+      ...parts,
+      // the one-line form, kept in step with the parts so anything reading a
+      // plain address (a booking, a list row) still gets a sensible string
+      address: formatAddress(parts, { floor: t("addrFloor"), apartment: t("addrApartment") }),
       lat: coords?.lat ?? null,
       lng: coords?.lng ?? null,
       is_default: makeDefault,
@@ -261,9 +286,20 @@ export default function SavedAddressesScreen() {
                       </View>
                     ) : null}
                   </View>
-                  <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5 }]}>
-                    {[item.city ? loc(item.city, "name") : null, item.address || null].filter(Boolean).join(" · ")}
+                  <Text numberOfLines={2} style={[RTL_TEXT, { color: colors.muted, fontSize: 12.5 }]}>
+                    {formatFullAddress(item, item.city ? loc(item.city, "name") : null, {
+                      floor: t("addrFloor"),
+                      apartment: t("addrApartment"),
+                    })}
                   </Text>
+                  {item.notes ? (
+                    <View style={{ ...ROW, alignItems: "center", gap: 5, marginTop: 2 }}>
+                      <Ionicons name="information-circle-outline" size={13} color={colors.faint} />
+                      <Text numberOfLines={1} style={[RTL_TEXT, { flex: 1, color: colors.faint, fontSize: 11.5 }]}>
+                        {item.notes}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
 
@@ -425,12 +461,68 @@ export default function SavedAddressesScreen() {
                 <Text style={[RTL_TEXT, { color: colors.danger, fontSize: 12 }]}>{errors.city}</Text>
               ) : null}
 
-              <Input
-                label={`${t("addrStreet")} (${t("optional")})`}
-                placeholder={t("addressPlaceholder")}
-                value={street}
-                onChangeText={setStreet}
-              />
+              {/* street takes the width; the house number is short and pairs
+                  with it on the same line the way you'd say them */}
+              <View style={{ ...ROW, gap: spacing.sm, alignItems: "flex-start" }}>
+                <View style={{ flex: 3 }}>
+                  <Input
+                    label={t("addrStreet")}
+                    placeholder={t("addrStreetPlaceholder")}
+                    value={street}
+                    onChangeText={(v) => {
+                      setStreet(v);
+                      if (errors.street) setErrors((e) => ({ ...e, street: undefined }));
+                    }}
+                    error={errors.street}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label={t("addrHouse")}
+                    value={houseNumber}
+                    onChangeText={(v) => {
+                      setHouseNumber(v);
+                      if (errors.house) setErrors((e) => ({ ...e, house: undefined }));
+                    }}
+                    error={errors.house}
+                    keyboardType="default"
+                    maxLength={10}
+                  />
+                </View>
+              </View>
+
+              {/* both optional, both short — one row */}
+              <View style={{ ...ROW, gap: spacing.sm, alignItems: "flex-start" }}>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label={`${t("addrFloor")} (${t("optional")})`}
+                    value={floor}
+                    onChangeText={setFloor}
+                    maxLength={10}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label={`${t("addrApartment")} (${t("optional")})`}
+                    value={apartment}
+                    onChangeText={setApartment}
+                    maxLength={10}
+                  />
+                </View>
+              </View>
+
+              <View style={{ gap: 6 }}>
+                <Input
+                  label={`${t("addrNotes")} (${t("optional")})`}
+                  placeholder={t("addrNotesPlaceholder")}
+                  value={notes}
+                  onChangeText={setNotes}
+                  multiline
+                  maxLength={200}
+                  style={{ minHeight: 64, textAlignVertical: "top" }}
+                />
+                <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12 }]}>{t("addrNotesHint")}</Text>
+              </View>
 
               {/* editing the existing default: it already is, so no toggle */}
               {editing?.is_default ? null : (

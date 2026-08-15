@@ -35,6 +35,13 @@ export interface SavedAddress {
   user_id: string;
   label: string;
   city_id: number | null;
+  street: string;
+  house_number: string;
+  floor: string | null;
+  apartment: string | null;
+  /** how to find the place once you're there — "entrance from the back" */
+  notes: string | null;
+  /** the one-line form, composed by formatAddress(); pre-split rows kept theirs here */
   address: string;
   lat: number | null;
   lng: number | null;
