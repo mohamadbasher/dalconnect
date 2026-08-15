@@ -1,4 +1,4 @@
-// Profile tab — brand hero, become-pro promo, quiet grouped rows, sign out, delete account.
+// Profile tab — brand hero, quiet grouped rows, sign out, delete account.
 import React, { useState } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, TextStyle, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";

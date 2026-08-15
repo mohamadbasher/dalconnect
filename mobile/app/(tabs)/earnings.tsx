@@ -120,7 +120,6 @@ export default function EarningsScreen() {
         }}
       >
         <EmptyState icon="briefcase-outline" title={t("proGateTitle")} subtitle={t("proGateSubtitle")} />
-        <Button title={t("proGateCta")} icon="briefcase-plus" onPress={() => router.push("/become-pro")} />
       </View>
     );
   }

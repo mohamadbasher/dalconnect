@@ -11,6 +11,7 @@ import { ROW } from "../../lib/rtl";
 import { BookingCard } from "../../components/BookingCard";
 import { Button, EmptyState, SkeletonList } from "../../components/ui";
 import type { Booking, BookingStatus } from "../../lib/types";
+import { PROFILE_FIELDS } from "../../lib/queries";
 
 type Segment = "active" | "done" | "other";
 
@@ -37,7 +38,7 @@ export default function JobsScreen() {
     try {
       const { data } = await supabase
         .from("bookings")
-        .select("*, category:categories(*), customer:profiles!bookings_customer_id_fkey(*), city:cities(*)")
+        .select(`*, category:categories(*), customer:profiles!bookings_customer_id_fkey(${PROFILE_FIELDS}), city:cities(*)`)
         .eq("professional_id", uid)
         .order("created_at", { ascending: false });
       setBookings((data as unknown as Booking[]) ?? []);
@@ -93,7 +94,6 @@ export default function JobsScreen() {
         }}
       >
         <EmptyState icon="briefcase-outline" title={t("proGateTitle")} subtitle={t("proGateSubtitle")} />
-        <Button title={t("proGateCta")} icon="briefcase-plus" onPress={() => router.push("/become-pro")} />
       </View>
     );
   }

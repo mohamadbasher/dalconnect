@@ -12,6 +12,7 @@ import { ROW, RTL_TEXT } from "../../lib/rtl";
 import { BookingCard } from "../../components/BookingCard";
 import { Button, EmptyState, Skeleton, SkeletonList } from "../../components/ui";
 import type { Booking, BookingStatus } from "../../lib/types";
+import { PROFILE_FIELDS } from "../../lib/queries";
 
 type Segment = "active" | "done" | "cancelled";
 
@@ -100,7 +101,7 @@ export default function BookingsTab() {
     if (!uid) return;
     const { data, error } = await supabase
       .from("bookings")
-      .select("*, category:categories(*), professional:professionals(*, profile:profiles!professionals_id_fkey(*))")
+      .select(`*, category:categories(*), professional:professionals(*, profile:profiles!professionals_id_fkey(${PROFILE_FIELDS}))`)
       .eq("customer_id", uid)
       .order("created_at", { ascending: false });
     if (!error) setBookings((data as unknown as Booking[]) ?? []);

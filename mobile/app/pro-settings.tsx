@@ -126,7 +126,10 @@ export default function ProSettingsScreen() {
   }, [cities, citySearch]);
 
   if (!uid) return <Redirect href="/(auth)/welcome" />;
-  if (!isPro || !professional) return <Redirect href="/become-pro" />;
+  // Not a professional: there is nothing to configure, and /become-pro is no
+  // longer a route a customer can complete — professionals register on their
+  // own track from the login screen. Send them back to their own profile.
+  if (!isPro || !professional) return <Redirect href="/(tabs)/profile" />;
   if (loading) return <Loading />;
 
   const selectedCity = cities.find((c) => c.id === cityId) ?? null;

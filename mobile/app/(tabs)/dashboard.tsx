@@ -40,6 +40,7 @@ import {
 } from "../../components/ui";
 import { useToast } from "../../components/Toast";
 import type { Booking, BookingUrgency, Offer, OfferStatus } from "../../lib/types";
+import { PROFILE_FIELDS } from "../../lib/queries";
 
 const ETA_PRESETS = [30, 60, 90, 120];
 
@@ -114,7 +115,7 @@ export default function DashboardScreen() {
       if (catIds.length) {
         const { data: openData } = await supabase
           .from("bookings")
-          .select("*, category:categories(*), customer:profiles!bookings_customer_id_fkey(*), city:cities(*)")
+          .select(`*, category:categories(*), customer:profiles!bookings_customer_id_fkey(${PROFILE_FIELDS}), city:cities(*)`)
           .eq("status", "open")
           .in("category_id", catIds)
           .neq("customer_id", uid)
@@ -195,7 +196,6 @@ export default function DashboardScreen() {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: "center", padding: spacing.lg, gap: spacing.lg }}>
         <EmptyState icon="briefcase-outline" title={t("proGateTitle")} subtitle={t("proGateSubtitle")} />
-        <Button title={t("proGateCta")} icon="briefcase-plus" onPress={() => router.push("/become-pro")} />
       </View>
     );
   }

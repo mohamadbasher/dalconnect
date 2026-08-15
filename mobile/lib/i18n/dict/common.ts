@@ -14,7 +14,6 @@ export const common: Dict = {
   menuFavorites: { ar: "المفضلة", he: "מועדפים" },
   menuMyBookings: { ar: "طلباتي", he: "ההזמנות שלי" },
   menuNotifications: { ar: "الإشعارات", he: "התראות" },
-  menuBecomePro: { ar: "انضم كمهني", he: "הצטרפו כבעלי מקצוע" },
   menuProSettings: { ar: "إعدادات النشاط التجاري", he: "הגדרות העסק" },
   menuSwitchToPro: { ar: "التبديل لوضع المهني", he: "מעבר למצב בעל מקצוע" },
   menuSwitchToCustomer: { ar: "التبديل لوضع العميل", he: "מעבר למצב לקוח" },

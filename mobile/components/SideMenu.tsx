@@ -133,7 +133,10 @@ export function SideMenu({ visible, onClose }: { visible: boolean; onClose: () =
           </View>
 
           <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md }}>
-            {/* pro mode switch — replaces the old top-bar toggle */}
+            {/* Pro-mode switch — replaces the old top-bar toggle. Shown only to
+                accounts that ARE professionals; the "join as a professional"
+                row that used to sit in the else branch is gone, since providers
+                now register on their own track from the login screen. */}
             {isPro ? (
               <MenuRow
                 icon={mode === "pro" ? "person-outline" : "briefcase-outline"}
@@ -145,9 +148,7 @@ export function SideMenu({ visible, onClose }: { visible: boolean; onClose: () =
                   router.replace(mode === "pro" ? "/(tabs)" : "/(tabs)/dashboard");
                 }}
               />
-            ) : (
-              <MenuRow icon="briefcase-outline" label={t("menuBecomePro")} tint={colors.brand} onPress={() => go("/become-pro")} />
-            )}
+            ) : null}
 
             <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.xs }} />
 

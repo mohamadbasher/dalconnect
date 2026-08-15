@@ -55,8 +55,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfessional(null);
       return;
     }
-    const { data: prof } = await supabase.from("profiles").select("*").eq("id", s.user.id).single();
-    setProfile((prof as Profile) ?? null);
+    // Not `from("profiles").select("*")`: migration 20260714000011 revoked the
+    // table-level SELECT grant so nobody can harvest other people's phone
+    // numbers, and a `select=*` against a column-granted table fails outright
+    // rather than returning a partial row. This RPC returns the caller's own
+    // row — the one place a full profile, phone included, is legitimate.
+    const { data: rpcProfile } = await supabase.rpc("get_my_profile").single();
+    const prof = (rpcProfile as Profile | null) ?? null;
+    setProfile(prof);
     if (prof?.role === "professional" || prof?.role === "admin") {
       const { data: pro } = await supabase.from("professionals").select("*").eq("id", s.user.id).maybeSingle();
       setProfessional((pro as Professional) ?? null);

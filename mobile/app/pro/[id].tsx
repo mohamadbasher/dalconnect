@@ -31,9 +31,10 @@ import { hasWorkingHours, isOpenNow, todayHoursLabel } from "../../lib/hours";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
 import { Avatar, Button, Card, EmptyState, Loading, SectionHeader, StarRating } from "../../components/ui";
 import type { GalleryItem, ProCard as ProCardType, Review } from "../../lib/types";
+import { PROFILE_FIELDS } from "../../lib/queries";
 
 const PRO_SELECT =
-  "*, profile:profiles!professionals_id_fkey(*), professional_categories(category:categories(*)), city:cities(*)";
+  `*, profile:profiles!professionals_id_fkey(${PROFILE_FIELDS}), professional_categories(category:categories(*)), city:cities(*)`;
 
 /** Clock times and counts are Latin digits — keep them LTR inside the RTL layout. */
 const LTR: TextStyle = { writingDirection: "ltr" };
@@ -160,7 +161,7 @@ export default function ProProfileScreen() {
           .order("created_at", { ascending: false }),
         supabase
           .from("reviews")
-          .select("*, customer:profiles(*)")
+          .select(`*, customer:profiles(${PROFILE_FIELDS})`)
           .eq("professional_id", proId)
           .order("created_at", { ascending: false })
           .limit(10),

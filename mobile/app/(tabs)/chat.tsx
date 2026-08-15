@@ -11,9 +11,10 @@ import { ROW, RTL_TEXT } from "../../lib/rtl";
 import { Avatar, EmptyState, Loading } from "../../components/ui";
 import { formatTime } from "../../lib/format";
 import type { Conversation, Profile } from "../../lib/types";
+import { PROFILE_FIELDS } from "../../lib/queries";
 
 const CONVO_SELECT =
-  "*, customer:profiles!conversations_customer_id_fkey(*), professional:profiles!conversations_professional_id_fkey(*)";
+  `*, customer:profiles!conversations_customer_id_fkey(${PROFILE_FIELDS}), professional:profiles!conversations_professional_id_fkey(${PROFILE_FIELDS})`;
 
 export default function ChatTab() {
   const { colors, shadows } = useTheme();

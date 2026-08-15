@@ -46,7 +46,10 @@ let userId = null;
 
 console.log("3. handle_new_user trigger created a profile row");
 {
-  const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single();
+  // profiles can no longer be read with select(*): migration 20260714000011
+  // dropped the table-level grant so nobody can harvest phone numbers. Your own
+  // row (phone included) comes from the definer RPC.
+  const { data, error } = await supabase.rpc("get_my_profile").single();
   ok(!error && data?.role === "customer", `profile role=${data?.role} name=${data?.full_name} ${error ? "- " + error.message : ""}`);
 }
 
@@ -56,17 +59,20 @@ console.log("4. RLS blocks self-promotion to admin");
   ok(!!error, `admin escalation correctly rejected ${error ? "(" + error.message.slice(0, 60) + ")" : "- WAS ALLOWED!"}`);
 }
 
-console.log("5. become_professional RPC upgrades role atomically");
+console.log("5. become_professional is NO LONGER callable by a customer");
 {
+  // Professionals register on their own track from the login screen (6-digit
+  // provider number). Converting a customer account was withdrawn from the
+  // product, and 20260714000010 revoked EXECUTE — from PUBLIC, not just from
+  // anon/authenticated, since those two inherit the default PUBLIC grant and
+  // revoking from them alone leaves the function just as callable.
   const { data: cats } = await supabase.from("categories").select("id").limit(2);
   const { error } = await supabase.rpc("become_professional", {
     p_business_name: "كهرباء سمير",
     p_bio: "خبرة 10 سنوات",
     p_category_ids: cats.map((c) => c.id),
   });
-  const { data: prof } = await supabase.from("profiles").select("role").eq("id", userId).single();
-  const { data: pro } = await supabase.from("professionals").select("business_name").eq("id", userId).single();
-  ok(!error && prof?.role === "professional" && !!pro, `role=${prof?.role}, business=${pro?.business_name} ${error ? "- " + error.message : ""}`);
+  ok(!!error, error ? `correctly refused (${error.message.slice(0, 55)})` : "- WAS ALLOWED: customers can still self-convert");
 }
 
 console.log("6. Create an open booking (self as customer)");

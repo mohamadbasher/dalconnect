@@ -36,6 +36,7 @@ import { channelTopic } from "../../lib/realtime";
 import { getOrCreateConversation } from "../../lib/chat";
 import { callPhone, fetchContactPhone, openWhatsApp } from "../../lib/contact";
 import { formatDateTime, STATUS_KEY, STATUS_TONE } from "../../lib/format";
+import { PROFILE_FIELDS } from "../../lib/queries";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
 import {
   Avatar,
@@ -217,7 +218,7 @@ export default function BookingDetail() {
     const { data } = await supabase
       .from("bookings")
       .select(
-        "*, category:categories(*), city:cities(*), professional:professionals(*, profile:profiles!professionals_id_fkey(*))"
+        `*, category:categories(*), city:cities(*), professional:professionals(*, profile:profiles!professionals_id_fkey(${PROFILE_FIELDS}))`
       )
       .eq("id", id)
       .maybeSingle();
@@ -229,7 +230,7 @@ export default function BookingDetail() {
       const { data: offs } = await supabase
         .from("offers")
         .select(
-          "*, professional:professionals(*, profile:profiles!professionals_id_fkey(*), city:cities(*))"
+          `*, professional:professionals(*, profile:profiles!professionals_id_fkey(${PROFILE_FIELDS}), city:cities(*))`
         )
         .eq("booking_id", id)
         .in("status", ["pending", "rejected"])

@@ -33,10 +33,11 @@ import { formatTime } from "../../lib/format";
 import { uploadImage } from "../../lib/upload";
 import { getCurrentPosition } from "../../lib/location";
 import type { Conversation, Message, Profile } from "../../lib/types";
+import { PROFILE_FIELDS } from "../../lib/queries";
 
 const PAGE = 40;
 const CONVO_SELECT =
-  "*, customer:profiles!conversations_customer_id_fkey(*), professional:profiles!conversations_professional_id_fkey(*)";
+  `*, customer:profiles!conversations_customer_id_fkey(${PROFILE_FIELDS}), professional:profiles!conversations_professional_id_fkey(${PROFILE_FIELDS})`;
 
 /** message + client-only flags for optimistic/failed sends */
 type LocalMessage = Message & { failed?: boolean; localUri?: string };

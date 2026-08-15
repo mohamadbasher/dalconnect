@@ -41,6 +41,7 @@ import {
 } from "../../components/ui";
 import { useToast } from "../../components/Toast";
 import type { Booking, BookingStatus, BookingUrgency } from "../../lib/types";
+import { PROFILE_FIELDS } from "../../lib/queries";
 
 const STEPS: BookingStatus[] = ["accepted", "on_the_way", "in_progress", "completed"];
 const STEP_ICONS: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = {
@@ -85,7 +86,7 @@ export default function JobScreen() {
     try {
       const { data } = await supabase
         .from("bookings")
-        .select("*, category:categories(*), customer:profiles!bookings_customer_id_fkey(*), city:cities(*)")
+        .select(`*, category:categories(*), customer:profiles!bookings_customer_id_fkey(${PROFILE_FIELDS}), city:cities(*)`)
         .eq("id", id)
         .maybeSingle();
       setBooking((data as unknown as Booking) ?? null);

@@ -102,10 +102,12 @@ never from browsing.
    before a public launch.
 5. **The `professionals` ↔ `profiles` embed is ambiguous by default** in PostgREST
    (two relationships exist between them). Every query that joins them **must** use
-   the explicit constraint name: `profile:profiles!professionals_id_fkey(*)`. Using
-   plain `profiles(*)` will fail at runtime with "more than one relationship found."
-   This bit us once already — grep for `professionals_id_fkey` before "simplifying"
-   any of these queries.
+   the explicit constraint name. Using plain `profiles(...)` will fail at runtime with
+   "more than one relationship found." This bit us once already — grep for
+   `professionals_id_fkey` before "simplifying" any of these queries.
+   **Note also that `profiles` can no longer be selected with `*`** (see the security
+   section): use `` `profile:profiles!professionals_id_fkey(${PROFILE_FIELDS})` ``
+   from `mobile/lib/queries.ts`.
 6. **Email confirmation is disabled** on the Supabase Auth provider (`mailer_autoconfirm:
    true`) — required for the synthetic-email phone signup flow to work without SMS.
    Don't re-enable it without changing the auth flow.
@@ -257,3 +259,28 @@ not part of the app runtime:
 - Saved job-site address book (a customer's home/office as reusable addresses).
 - Shared-device fraud detection (flag when many accounts share one device id).
 - Voice messages in chat.
+
+---
+
+## Security posture (audited 2026-08-15)
+
+`scripts/security-audit.mjs` signs in as a real customer and a real professional
+and *tries* the attacks, then reports what actually happened. It found seven
+live holes, all now closed by migrations 10–12 and re-verified by the same
+script. Run it after any change to RLS, grants, or the guard triggers.
+
+Two things about this codebase's threat model are worth internalising:
+
+**RLS is row-level. It says nothing about columns.** Every `for update using
+(owner = auth.uid())` policy here lets that owner rewrite *any* column on their
+own row unless a BEFORE UPDATE trigger says otherwise. That is how a customer
+could once close their own job for free (`final_price = 0`), and how a
+professional could self-issue the verified badge, forge their rating, and edit
+the price of an already-accepted quote. New writable table ⇒ new column guard.
+
+**Postgres grants default to PUBLIC.** `revoke execute ... from anon,
+authenticated` is a no-op on its own, because both inherit PUBLIC's grant —
+revoke from `public` too. The same trap applies to table-level SELECT: a
+column-level `revoke select (col)` does nothing while a table-level grant
+stands, which is why hiding `profiles.phone` required dropping the table grant
+and re-granting the other columns by name.
