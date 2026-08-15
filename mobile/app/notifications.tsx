@@ -52,8 +52,15 @@ export default function NotificationsScreen() {
     }
   }, [uid]);
 
+  // Opening this screen IS reading its contents — nobody should have to tap a
+  // separate "mark all read" for that. Sequenced after load(), not alongside
+  // it: firing both at once risks the read landing between the SELECT and the
+  // UPDATE, so the freshly-fetched rows would show unread anyway.
   useEffect(() => {
-    load().finally(() => setLoading(false));
+    load()
+      .then(() => markAllRead())
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
   // realtime: prepend new notifications

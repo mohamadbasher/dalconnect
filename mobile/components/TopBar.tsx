@@ -15,7 +15,7 @@ export function TopBar() {
   const router = useRouter();
   // One shared subscription lives in the provider — this bar is mounted once
   // per tab screen, so it must never own a channel of its own.
-  const { unread } = useNotifications();
+  const { unread, clearUnread } = useNotifications();
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -69,7 +69,15 @@ export function TopBar() {
           </Pressable>
 
           <Pressable
-            onPress={() => router.push("/notifications")}
+            onPress={() => {
+              // Opening the list IS "I've seen these" — the badge clears the
+              // instant you tap, not after a network round trip finishes on
+              // the next screen. The actual is_read write still happens on
+              // notifications.tsx itself, so this stays correct no matter how
+              // that screen was reached (bell, deep link, a push tap).
+              clearUnread();
+              router.push("/notifications");
+            }}
             accessibilityRole="button"
             hitSlop={8}
             style={({ pressed }) => ({
