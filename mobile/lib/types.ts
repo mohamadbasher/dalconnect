@@ -29,6 +29,21 @@ export interface City {
   is_active: boolean;
 }
 
+/** A place the customer orders to repeatedly — "בית", "עבודה", "בית ההורים". */
+export interface SavedAddress {
+  id: string;
+  user_id: string;
+  label: string;
+  city_id: number | null;
+  address: string;
+  lat: number | null;
+  lng: number | null;
+  is_default: boolean;
+  created_at: string;
+  // joined
+  city?: City | null;
+}
+
 export interface Category {
   id: number;
   slug: string;

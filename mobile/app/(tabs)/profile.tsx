@@ -1,13 +1,15 @@
-// Profile tab — brand hero, quiet grouped rows, sign out, delete account.
+// Profile tab — an account centre, not a settings list: who you are, then
+// grouped sections for account, preferences, help, and finally sign out.
+// Deleting an account lives behind /account-settings; notifications are not
+// here at all, since the top-bar bell is on every screen already.
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, TextStyle, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, Text, TextStyle, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Constants from "expo-constants";
 import { useTheme, radius, spacing } from "../../lib/theme";
 import { useI18n, LANG_NAMES } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
-import { supabase } from "../../lib/supabase";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
 import { Avatar, Button, Card, Loading, SectionHeader } from "../../components/ui";
 import type { Lang } from "../../lib/types";
@@ -141,7 +143,6 @@ export default function ProfileScreen() {
   const { profile, professional, isPro, mode, setMode, signOut, loading } = useAuth();
   const router = useRouter();
   const [aboutVisible, setAboutVisible] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   if (loading || !profile) return <Loading />;
 
@@ -162,37 +163,8 @@ export default function ProfileScreen() {
     ]);
   };
 
-  // ---- delete account (store requirement): two explicit confirms, then RPC ----
-  const deleteAccount = async () => {
-    if (deleting) return;
-    setDeleting(true);
-    try {
-      const { error } = await supabase.rpc("delete_account");
-      if (error) throw error;
-      await signOut();
-      router.replace("/(auth)/welcome");
-    } catch {
-      Alert.alert(t("error"), t("profileDeleteError"));
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const confirmDeleteAccount = () => {
-    Alert.alert(t("profileDeleteAccount"), t("profileDeleteConfirm1"), [
-      { text: t("cancel"), style: "cancel" },
-      {
-        text: t("profileDeleteContinue"),
-        style: "destructive",
-        onPress: () => {
-          Alert.alert(t("profileDeleteConfirm2Title"), t("profileDeleteConfirm2"), [
-            { text: t("cancel"), style: "cancel" },
-            { text: t("profileDeleteForever"), style: "destructive", onPress: deleteAccount },
-          ]);
-        },
-      },
-    ]);
-  };
+  // Deleting an account now lives in /account-settings — see the comment by the
+  // sign-out row below.
 
   const group: (children: React.ReactNode) => React.ReactNode = (children) => (
     <View
@@ -358,15 +330,29 @@ export default function ProfileScreen() {
         </Pressable>
       </View>
 
-      {/* ---------- account ---------- */}
+      {/* ---------- my account ----------
+           Notifications is deliberately NOT here: the bell in the top bar is on
+           every screen, so a second entry point only pads the list. */}
       <View>
         <SectionHeader title={t("profileSectionAccount")} />
         {group(
           <>
             <MenuRow
-              icon="notifications-outline"
-              label={t("notifications")}
-              onPress={() => router.push("/notifications")}
+              icon="person-outline"
+              label={t("profilePersonalDetails")}
+              onPress={() => router.push("/edit-profile")}
+            />
+            <Divider />
+            <MenuRow
+              icon="location-outline"
+              label={t("profileSavedAddresses")}
+              onPress={() => router.push("/saved-addresses")}
+            />
+            <Divider />
+            <MenuRow
+              icon="settings-outline"
+              label={t("profileSettings")}
+              onPress={() => router.push("/account-settings")}
             />
             {isPro ? (
               <>
@@ -415,6 +401,31 @@ export default function ProfileScreen() {
                 onChange={setThemeMode}
               />
             </MenuRow>
+          </>
+        )}
+      </View>
+
+      {/* ---------- help & support ----------
+           "Report a problem" here is about the APP or the account. A complaint
+           about a specific job has its own route from that booking, where it
+           arrives attached to the booking and the professional. */}
+      <View>
+        <SectionHeader title={t("profileSectionHelp")} />
+        {group(
+          <>
+            <MenuRow icon="help-circle-outline" label={t("helpCenter")} onPress={() => router.push("/help")} />
+            <Divider />
+            <MenuRow
+              icon="chatbubble-ellipses-outline"
+              label={t("helpContact")}
+              onPress={() => router.push("/help")}
+            />
+            <Divider />
+            <MenuRow
+              icon="alert-circle-outline"
+              label={t("helpReportProblem")}
+              onPress={() => router.push("/report")}
+            />
             <Divider />
             <MenuRow
               icon="information-circle-outline"
@@ -425,21 +436,12 @@ export default function ProfileScreen() {
         )}
       </View>
 
-      {/* ---------- sign out + delete account ---------- */}
+      {/* ---------- sign out ----------
+           Deleting an account moved to /account-settings: everything else on
+           this page is reversible, and an irreversible action does not belong
+           one tap away from "appearance". */}
       {group(
-        <>
-          <MenuRow icon="log-out-outline" label={t("profileSignOut")} onPress={confirmSignOut} danger hideChevron />
-          <Divider />
-          <MenuRow
-            icon="trash-outline"
-            label={t("profileDeleteAccount")}
-            onPress={deleting ? undefined : confirmDeleteAccount}
-            danger
-            hideChevron
-          >
-            {deleting ? <ActivityIndicator size="small" color={colors.danger} /> : null}
-          </MenuRow>
-        </>
+        <MenuRow icon="log-out-outline" label={t("profileSignOut")} onPress={confirmSignOut} danger hideChevron />
       )}
 
       <Text style={{ color: colors.faint, fontSize: 12, textAlign: "center" }}>
