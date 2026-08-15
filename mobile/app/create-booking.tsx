@@ -1009,7 +1009,10 @@ export default function CreateBooking() {
       {/* category picker bottom sheet — reached only via "change", so the full
           catalogue stays out of the way of someone who already chose */}
       <Modal visible={catModal} transparent animationType="slide" onRequestClose={() => setCatModal(false)}>
-        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}
+        >
           <Pressable style={{ flex: 1 }} onPress={() => setCatModal(false)} />
           <View
             style={{
@@ -1090,12 +1093,15 @@ export default function CreateBooking() {
               )}
             />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* city picker bottom sheet */}
       <Modal visible={cityModal} transparent animationType="slide" onRequestClose={() => setCityModal(false)}>
-        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}
+        >
           <Pressable style={{ flex: 1 }} onPress={() => setCityModal(false)} />
           <View
             style={{
@@ -1160,7 +1166,7 @@ export default function CreateBooking() {
               )}
             />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

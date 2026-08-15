@@ -516,9 +516,13 @@ export default function ProSettingsScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* city picker bottom sheet */}
+      {/* city picker bottom sheet — the search field opens a keyboard, and a
+          bottom sheet sits exactly where the keyboard appears */}
       <Modal visible={cityModal} transparent animationType="slide" onRequestClose={() => setCityModal(false)}>
-        <View style={{ flex: 1, backgroundColor: colors.overlay }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1, backgroundColor: colors.overlay }}
+        >
           <Pressable style={{ flex: 1 }} onPress={() => setCityModal(false)} />
           <View
             style={{
@@ -559,7 +563,7 @@ export default function ProSettingsScreen() {
               )}
             />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* public-profile preview — "how a customer sees you" */}

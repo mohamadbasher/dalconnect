@@ -8,7 +8,16 @@
 // One list, one sheet to add or edit. The default address is the one
 // create-booking pre-fills, so it is the only state worth showing on a row.
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
@@ -294,9 +303,15 @@ export default function SavedAddressesScreen() {
         <Button title={t("addrAdd")} icon="plus" onPress={() => openSheet(null)} />
       </View>
 
-      {/* add / edit sheet */}
+      {/* add / edit sheet.
+          KeyboardAvoidingView is load-bearing: a bottom sheet sits ON the
+          keyboard's half of the screen, so without it the keyboard opens
+          straight over the fields and you type blind. */}
       <Modal visible={sheetOpen} transparent animationType="slide" onRequestClose={() => setSheetOpen(false)}>
-        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}
+        >
           <Pressable style={{ flex: 1 }} onPress={() => setSheetOpen(false)} />
           <View
             style={{
@@ -305,7 +320,10 @@ export default function SavedAddressesScreen() {
               borderTopRightRadius: radius.xl,
               maxHeight: "88%",
               padding: spacing.lg,
-              paddingBottom: insets.bottom + spacing.lg,
+              // The keyboard already covers the home indicator when it's up, so
+              // adding the safe-area inset on top of it strands the save button
+              // behind the keyboard.
+              paddingBottom: spacing.lg,
               gap: spacing.md,
             }}
           >
@@ -432,12 +450,15 @@ export default function SavedAddressesScreen() {
               <Button title={t("save")} loading={saving} onPress={save} />
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* city picker */}
+      {/* city picker — same reason: it opens a keyboard for the search field */}
       <Modal visible={cityModal} transparent animationType="slide" onRequestClose={() => setCityModal(false)}>
-        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}
+        >
           <Pressable style={{ flex: 1 }} onPress={() => setCityModal(false)} />
           <View
             style={{
@@ -446,7 +467,7 @@ export default function SavedAddressesScreen() {
               borderTopRightRadius: radius.xl,
               maxHeight: "75%",
               padding: spacing.lg,
-              paddingBottom: insets.bottom + spacing.lg,
+              paddingBottom: spacing.lg,
               gap: spacing.md,
             }}
           >
@@ -479,7 +500,7 @@ export default function SavedAddressesScreen() {
               )}
             />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

@@ -5,7 +5,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -96,7 +98,11 @@ export function PickerSheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: colors.overlay }}>
+      {/* searchable sheets open a keyboard; without this it covers the list */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1, justifyContent: "flex-end", backgroundColor: colors.overlay }}
+      >
         <Pressable style={{ flex: 1 }} onPress={onClose} />
         <View
           style={{
@@ -152,7 +158,7 @@ export function PickerSheet({
             }
           />
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

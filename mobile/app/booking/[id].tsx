@@ -15,8 +15,10 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  KeyboardAvoidingView,
   Linking,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -1323,9 +1325,11 @@ export default function BookingDetail() {
         />
       ) : null}
 
-      {/* cancel confirm modal */}
+      {/* cancel confirm modal — the reason field opens a keyboard, so this has
+          to move out of its way like any other form */}
       <Modal visible={cancelVisible} transparent animationType="fade" onRequestClose={() => setCancelVisible(false)}>
-        <View
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{
             flex: 1,
             backgroundColor: colors.overlay,
@@ -1364,7 +1368,7 @@ export default function BookingDetail() {
               />
             </View>
           </Card>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* confirm-completion modal — same shape as the cancel one: state the
