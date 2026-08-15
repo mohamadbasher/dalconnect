@@ -8,138 +8,18 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Constants from "expo-constants";
 import { useTheme, radius, spacing } from "../../lib/theme";
-import { useI18n, LANG_NAMES } from "../../lib/i18n";
+import { useI18n } from "../../lib/i18n";
 import { useAuth } from "../../context/AuthContext";
 import { ROW, RTL_TEXT } from "../../lib/rtl";
 import { Avatar, Button, Card, Loading, SectionHeader } from "../../components/ui";
-import type { Lang } from "../../lib/types";
+import { Divider, MenuRow, SettingsGroup } from "../../components/settings-ui";
 
 /** Phone numbers are Latin digits — pin them LTR inside the RTL layout. */
 const LTR: TextStyle = { writingDirection: "ltr", textAlign: "right" };
 
-/** A quiet settings row: icon disc, label, optional trailing control, chevron. */
-function MenuRow({
-  icon,
-  label,
-  onPress,
-  danger,
-  children,
-  hideChevron,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress?: () => void;
-  danger?: boolean;
-  children?: React.ReactNode;
-  hideChevron?: boolean;
-}) {
-  const { colors } = useTheme();
-  const fg = danger ? colors.danger : colors.text;
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={!onPress}
-      style={({ pressed }) => ({
-        ...ROW,
-        gap: spacing.md,
-        paddingVertical: 13,
-        paddingHorizontal: spacing.lg,
-        opacity: pressed && onPress ? 0.7 : 1,
-      })}
-    >
-      <View
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: radius.md,
-          backgroundColor: danger ? colors.dangerTint : colors.brandTint,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Ionicons name={icon} size={17} color={danger ? colors.danger : colors.brand} />
-      </View>
-      <Text style={[RTL_TEXT, { flex: 1, color: fg, fontSize: 15, fontWeight: "600" }]}>{label}</Text>
-      {children}
-      {/* RTL: "back" points right, which is forward in this layout */}
-      {onPress && !hideChevron ? <Ionicons name="chevron-back" size={17} color={colors.faint} /> : null}
-    </Pressable>
-  );
-}
-
-/** Hairline between rows, inset past the icon disc so it starts under the label. */
-function Divider() {
-  const { colors } = useTheme();
-  return (
-    <View
-      style={{
-        height: 1,
-        backgroundColor: colors.hairline,
-        marginRight: spacing.lg + 34 + spacing.md,
-        marginLeft: spacing.lg,
-      }}
-    />
-  );
-}
-
-/** Compact segmented pill — the calm way to show a two/three-way choice in a row. */
-function Segmented<T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: { key: T; label?: string; icon?: keyof typeof Ionicons.glyphMap; a11y?: string }[];
-  value: T;
-  onChange: (k: T) => void;
-}) {
-  const { colors, shadows } = useTheme();
-  return (
-    <View
-      style={{
-        ...ROW,
-        gap: 2,
-        backgroundColor: colors.chip,
-        borderRadius: radius.full,
-        padding: 3,
-      }}
-    >
-      {options.map((o) => {
-        const on = o.key === value;
-        return (
-          <Pressable
-            key={o.key}
-            onPress={() => onChange(o.key)}
-            accessibilityRole="button"
-            accessibilityLabel={o.a11y ?? o.label}
-            accessibilityState={{ selected: on }}
-            style={{
-              ...ROW,
-              gap: 5,
-              paddingHorizontal: o.label ? 12 : 10,
-              paddingVertical: 6,
-              borderRadius: radius.full,
-              backgroundColor: on ? colors.card : "transparent",
-              ...(on ? shadows.card : null),
-            }}
-          >
-            {o.icon ? (
-              <Ionicons name={o.icon} size={15} color={on ? colors.brand : colors.muted} />
-            ) : null}
-            {o.label ? (
-              <Text style={{ color: on ? colors.brand : colors.muted, fontSize: 12.5, fontWeight: "700" }}>
-                {o.label}
-              </Text>
-            ) : null}
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 export default function ProfileScreen() {
-  const { colors, shadows, mode: themeMode, setMode: setThemeMode } = useTheme();
-  const { t, lang, setLang } = useI18n();
+  const { colors, shadows } = useTheme();
+  const { t } = useI18n();
   const { profile, professional, isPro, mode, setMode, signOut, loading } = useAuth();
   const router = useRouter();
   const [aboutVisible, setAboutVisible] = useState(false);
@@ -165,19 +45,6 @@ export default function ProfileScreen() {
 
   // Deleting an account now lives in /account-settings — see the comment by the
   // sign-out row below.
-
-  const group: (children: React.ReactNode) => React.ReactNode = (children) => (
-    <View
-      style={{
-        backgroundColor: colors.card,
-        borderRadius: radius.lg,
-        paddingVertical: spacing.xs,
-        ...shadows.card,
-      }}
-    >
-      {children}
-    </View>
-  );
 
   return (
     <ScrollView
@@ -335,8 +202,7 @@ export default function ProfileScreen() {
            every screen, so a second entry point only pads the list. */}
       <View>
         <SectionHeader title={t("profileSectionAccount")} />
-        {group(
-          <>
+        <SettingsGroup>
             <MenuRow
               icon="person-outline"
               label={t("profilePersonalDetails")}
@@ -373,37 +239,12 @@ export default function ProfileScreen() {
                 </MenuRow>
               </>
             ) : null}
-          </>
-        )}
+          </SettingsGroup>
       </View>
 
-      {/* ---------- preferences ---------- */}
-      <View>
-        <SectionHeader title={t("profileSectionPreferences")} />
-        {group(
-          <>
-            <MenuRow icon="language-outline" label={t("language")} hideChevron>
-              <Segmented
-                options={(["ar", "he"] as Lang[]).map((l) => ({ key: l, label: LANG_NAMES[l] }))}
-                value={lang}
-                onChange={setLang}
-              />
-            </MenuRow>
-            <Divider />
-            <MenuRow icon="moon-outline" label={t("profileAppearance")} hideChevron>
-              <Segmented
-                options={[
-                  { key: "light", icon: "sunny-outline", a11y: t("lightMode") },
-                  { key: "dark", icon: "moon-outline", a11y: t("darkMode") },
-                  { key: "system", icon: "phone-portrait-outline", a11y: t("systemMode") },
-                ]}
-                value={themeMode}
-                onChange={setThemeMode}
-              />
-            </MenuRow>
-          </>
-        )}
-      </View>
+      {/* Language and appearance moved to /account-settings: they're set once
+          and rarely touched, so they were taking prime space on a page people
+          open to check their account. */}
 
       {/* ---------- help & support ----------
            "Report a problem" here is about the APP or the account. A complaint
@@ -411,8 +252,7 @@ export default function ProfileScreen() {
            arrives attached to the booking and the professional. */}
       <View>
         <SectionHeader title={t("profileSectionHelp")} />
-        {group(
-          <>
+        <SettingsGroup>
             <MenuRow icon="help-circle-outline" label={t("helpCenter")} onPress={() => router.push("/help")} />
             <Divider />
             <MenuRow
@@ -432,17 +272,15 @@ export default function ProfileScreen() {
               label={t("profileAboutLegal")}
               onPress={() => setAboutVisible(true)}
             />
-          </>
-        )}
+          </SettingsGroup>
       </View>
 
       {/* ---------- sign out ----------
            Deleting an account moved to /account-settings: everything else on
            this page is reversible, and an irreversible action does not belong
            one tap away from "appearance". */}
-      {group(
-        <MenuRow icon="log-out-outline" label={t("profileSignOut")} onPress={confirmSignOut} danger hideChevron />
-      )}
+      <SettingsGroup>
+        <MenuRow icon="log-out-outline" label={t("profileSignOut")} onPress={confirmSignOut} danger hideChevron /></SettingsGroup>
 
       <Text style={{ color: colors.faint, fontSize: 12, textAlign: "center" }}>
         {t("profileVersion", { version })}

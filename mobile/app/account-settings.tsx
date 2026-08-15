@@ -1,23 +1,27 @@
-// Account settings — the irreversible corner of the app.
+// Account settings — preferences, then the irreversible corner.
 //
-// Deleting an account used to sit on the profile tab, one tap from "language"
-// and "appearance". Everything else on that page is reversible; this is not, so
-// it lives behind its own door with room to say plainly what it does.
+// Language and appearance live here rather than on the profile tab: they are
+// set once and rarely touched again, so they were taking prime space on a page
+// people open to check their account. Deleting an account is here too, behind
+// its own door — everything on the profile tab is reversible, and an
+// irreversible action does not belong a tap away from "appearance".
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme, radius, spacing } from "../lib/theme";
-import { useI18n } from "../lib/i18n";
+import { useI18n, LANG_NAMES } from "../lib/i18n";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { ROW, RTL_TEXT } from "../lib/rtl";
-import { Button } from "../components/ui";
+import { Button, SectionHeader } from "../components/ui";
+import { Divider, MenuRow, Segmented, SettingsGroup } from "../components/settings-ui";
+import type { Lang } from "../lib/types";
 
 export default function AccountSettingsScreen() {
-  const { colors, shadows } = useTheme();
-  const { t } = useI18n();
+  const { colors, shadows, mode: themeMode, setMode: setThemeMode } = useTheme();
+  const { t, lang, setLang } = useI18n();
   const { signOut } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -78,7 +82,34 @@ export default function AccountSettingsScreen() {
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }}>
+      <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl }}>
+        {/* ---------- preferences ---------- */}
+        <View>
+          <SectionHeader title={t("profileSectionPreferences")} />
+          <SettingsGroup>
+            <MenuRow icon="language-outline" label={t("language")} hideChevron>
+              <Segmented
+                options={(["ar", "he"] as Lang[]).map((l) => ({ key: l, label: LANG_NAMES[l] }))}
+                value={lang}
+                onChange={setLang}
+              />
+            </MenuRow>
+            <Divider />
+            <MenuRow icon="moon-outline" label={t("profileAppearance")} hideChevron>
+              <Segmented
+                options={[
+                  { key: "light", icon: "sunny-outline", a11y: t("lightMode") },
+                  { key: "dark", icon: "moon-outline", a11y: t("darkMode") },
+                  { key: "system", icon: "phone-portrait-outline", a11y: t("systemMode") },
+                ]}
+                value={themeMode}
+                onChange={setThemeMode}
+              />
+            </MenuRow>
+          </SettingsGroup>
+        </View>
+
+        {/* ---------- danger zone ---------- */}
         <View
           style={{
             backgroundColor: colors.card,
@@ -119,7 +150,6 @@ export default function AccountSettingsScreen() {
             disabled={deleting}
             loading={deleting}
           />
-          {deleting ? <ActivityIndicator size="small" color={colors.danger} /> : null}
         </View>
       </ScrollView>
     </View>
