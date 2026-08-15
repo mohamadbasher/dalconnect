@@ -358,35 +358,6 @@ export default function ProfileScreen() {
         </Pressable>
       </View>
 
-      {/* ---------- become a pro (customers only) ---------- */}
-      {!isPro ? (
-        <Card style={{ backgroundColor: colors.brandTint, gap: spacing.md }}>
-          <View style={{ ...ROW, gap: spacing.md }}>
-            <View
-              style={{
-                width: 46,
-                height: 46,
-                borderRadius: radius.md,
-                backgroundColor: colors.brand,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Ionicons name="briefcase" size={22} color={colors.onBrand} />
-            </View>
-            <View style={{ flex: 1, gap: 3 }}>
-              <Text style={[RTL_TEXT, { color: colors.text, fontSize: 15.5, fontWeight: "800" }]}>
-                {t("profileBecomeProTitle")}
-              </Text>
-              <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 13, lineHeight: 19 }]}>
-                {t("profileBecomeProSubtitle")}
-              </Text>
-            </View>
-          </View>
-          <Button title={t("profileBecomeProCta")} onPress={() => router.push("/become-pro")} />
-        </Card>
-      ) : null}
-
       {/* ---------- account ---------- */}
       <View>
         <SectionHeader title={t("profileSectionAccount")} />

@@ -5,12 +5,6 @@ export const profile: Dict = {
   // ----- profile tab -----
   profileRoleCustomer: { ar: "عميل", he: "לקוח" },
   profileRolePro: { ar: "مهني", he: "בעל מקצוע" },
-  profileBecomeProTitle: { ar: "هل أنت صاحب مهنة؟", he: "בעלי מקצוע?" },
-  profileBecomeProSubtitle: {
-    ar: "انضم إلى دال كونكت واحصل على أعمال جديدة كل يوم",
-    he: "הצטרפו לדל קונקט וקבלו עבודות חדשות כל יום",
-  },
-  profileBecomeProCta: { ar: "انضم كمهني", he: "הצטרפות כבעל מקצוע" },
   profileBusinessSettings: { ar: "إعدادات العمل", he: "הגדרות העסק" },
   profileSwitchToPro: { ar: "التبديل إلى وضع المهني", he: "מעבר למצב בעל מקצוע" },
   profileSwitchToCustomer: { ar: "التبديل إلى وضع العميل", he: "מעבר למצב לקוח" },
