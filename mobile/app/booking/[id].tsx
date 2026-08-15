@@ -993,6 +993,48 @@ export default function BookingDetail() {
           </View>
         ) : null}
 
+        {/* ---------- customer confirms the work is done ----------
+             The professional has their own way to close a job out (with the
+             price they actually charged); this is what happens when the
+             CUSTOMER is the one who notices the work has wrapped up, so a job
+             doesn't sit stuck in "on the way" because the pro forgot to tap
+             their own button. Only appears once someone is actually en route
+             or on site — before that there's nothing to confirm.
+             Sits above the request details on purpose: once a job is under
+             way, "is it done?" is the more urgent question than "what did I
+             ask for?" — the reference material can wait one card further. */}
+        {booking.status === "on_the_way" || booking.status === "in_progress" ? (
+          <Card style={{ gap: spacing.md }}>
+            <View style={{ ...ROW, gap: 10, alignItems: "center" }}>
+              <View
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: radius.md,
+                  backgroundColor: colors.successTint,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <MaterialCommunityIcons name="flag-checkered" size={19} color={colors.success} />
+              </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[RTL_TEXT, { color: colors.text, fontSize: 14.5, fontWeight: "800" }]}>
+                  {t("finishWorkTitle")}
+                </Text>
+                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12, lineHeight: 17 }]}>
+                  {t("finishWorkSubtitle")}
+                </Text>
+              </View>
+            </View>
+            <Button
+              title={t("confirmWorkDone")}
+              icon="check-circle-outline"
+              onPress={() => setConfirmDoneVisible(true)}
+            />
+          </Card>
+        ) : null}
+
         {/* ---------- what the customer already typed: it recedes ----------
              While quotes are the job of this screen, the request itself is
              reference material — two lines and a tap. Once a professional is
@@ -1153,45 +1195,6 @@ export default function BookingDetail() {
             ) : null}
           </Card>
         </View>
-
-        {/* ---------- customer confirms the work is done ----------
-             The professional has their own way to close a job out (with the
-             price they actually charged); this is what happens when the
-             CUSTOMER is the one who notices the work has wrapped up, so a job
-             doesn't sit stuck in "on the way" because the pro forgot to tap
-             their own button. Only appears once someone is actually en route
-             or on site — before that there's nothing to confirm. */}
-        {booking.status === "on_the_way" || booking.status === "in_progress" ? (
-          <Card style={{ gap: spacing.md }}>
-            <View style={{ ...ROW, gap: 10, alignItems: "center" }}>
-              <View
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: radius.md,
-                  backgroundColor: colors.successTint,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <MaterialCommunityIcons name="flag-checkered" size={19} color={colors.success} />
-              </View>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={[RTL_TEXT, { color: colors.text, fontSize: 14.5, fontWeight: "800" }]}>
-                  {t("finishWorkTitle")}
-                </Text>
-                <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12, lineHeight: 17 }]}>
-                  {t("finishWorkSubtitle")}
-                </Text>
-              </View>
-            </View>
-            <Button
-              title={t("confirmWorkDone")}
-              icon="check-circle-outline"
-              onPress={() => setConfirmDoneVisible(true)}
-            />
-          </Card>
-        ) : null}
 
         {/* given rating (readonly) — shown as soon as the review row exists,
             even if the trigger hasn't flipped the status to 'rated' yet */}
