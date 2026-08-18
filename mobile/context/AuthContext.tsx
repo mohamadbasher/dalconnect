@@ -5,7 +5,8 @@ import { supabase, phoneToEmail, providerNoToEmail, identifierToEmail } from "..
 import { registerPushToken } from "../lib/notifications";
 import type { Lang, Professional, Profile } from "../lib/types";
 
-/** Professionals can flip between using the app as a customer or as a pro. */
+/** Which side of the product a session is looking at. Staff can flip; a
+ *  provider account is always "pro", a customer account always "customer". */
 export type AccountMode = "customer" | "pro";
 const MODE_KEY = "dalconnect.mode";
 
@@ -17,6 +18,8 @@ type AuthCtx = {
   loading: boolean;
   isPro: boolean;
   isAdmin: boolean;
+  /** Only staff can switch sides; a provider account has no customer half. */
+  canSwitchMode: boolean;
   setMode: (m: AccountMode) => void;
   signIn: (identifier: string, password: string) => Promise<void>;
   signUp: (args: { fullName: string; phone: string; password: string; lang: Lang }) => Promise<void>;
@@ -34,6 +37,7 @@ const Ctx = createContext<AuthCtx>({
   loading: true,
   isPro: false,
   isAdmin: false,
+  canSwitchMode: false,
   setMode: () => {},
   signIn: async () => {},
   signUp: async () => {},
@@ -184,7 +188,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       session,
       profile,
       professional,
-      mode: isPro ? mode : "customer" as AccountMode,
+      /**
+       * A provider account IS a provider account.
+       *
+       * The two tracks are separate signups on purpose — the same phone can
+       * hold a customer account and a provider account, each with its own
+       * login. So a professional signing in has no customer side to switch to
+       * here; they'd sign in to their customer account for that. Landing them
+       * on the customer service-picker and making them find a menu item to
+       * reach their own jobs was the old become-a-pro model, which is gone.
+       *
+       * Admins keep the switch: they are staff, not providers, and need to see
+       * both sides of the product they run.
+       */
+      mode: (profile?.role === "professional"
+        ? "pro"
+        : isAdmin
+          ? mode
+          : "customer") as AccountMode,
+      /** only staff have a second side to switch to */
+      canSwitchMode: isAdmin,
       loading,
       isPro,
       isAdmin,

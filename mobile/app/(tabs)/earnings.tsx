@@ -11,6 +11,7 @@ import { ROW, RTL_TEXT } from "../../lib/rtl";
 import { Button, Card, EmptyState, SectionHeader, SkeletonList } from "../../components/ui";
 import { EarningsBarGraph, type EarningsBar } from "../../components/EarningsBarGraph";
 import type { Transaction } from "../../lib/types";
+import { ProApprovalGate } from "../../components/ProApprovalGate";
 
 /** Shekel amounts are Latin digits — keep them LTR inside the RTL layout. */
 const LTR: TextStyle = { writingDirection: "ltr" };
@@ -107,6 +108,13 @@ export default function EarningsScreen() {
     }
     return { weekBars: out, weekTotal: sum };
   }, [txs, lang]);
+
+  // Approved professionals only. The database already refuses to show them
+  // open work or accept a quote (migration 20260714000017); without this the
+  // refusal would just look like an empty screen and a broken app.
+  if (professional && professional.verification_status !== "approved") {
+    return <ProApprovalGate status={professional.verification_status} />;
+  }
 
   if (!isPro || !professional || !uid) {
     return (

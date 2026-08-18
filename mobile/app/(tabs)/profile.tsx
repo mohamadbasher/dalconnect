@@ -20,7 +20,7 @@ const LTR: TextStyle = { writingDirection: "ltr", textAlign: "right" };
 export default function ProfileScreen() {
   const { colors, shadows } = useTheme();
   const { t } = useI18n();
-  const { profile, professional, isPro, mode, setMode, signOut, loading } = useAuth();
+  const { profile, professional, isPro, canSwitchMode, mode, setMode, signOut, loading } = useAuth();
   const router = useRouter();
   const [aboutVisible, setAboutVisible] = useState(false);
 
@@ -228,15 +228,21 @@ export default function ProfileScreen() {
                   label={t("profileBusinessSettings")}
                   onPress={() => router.push("/pro-settings")}
                 />
-                <Divider />
-                <MenuRow
-                  icon={mode === "pro" ? "person-outline" : "flash-outline"}
-                  label={t(mode === "pro" ? "profileSwitchToCustomer" : "profileSwitchToPro")}
-                  onPress={() => setMode(mode === "pro" ? "customer" : "pro")}
-                  hideChevron
-                >
-                  <Ionicons name="swap-horizontal" size={18} color={colors.brand} />
-                </MenuRow>
+                {/* Staff only — a provider account has no customer half to
+                    switch to; those are separate signups on the same phone. */}
+                {canSwitchMode ? (
+                  <>
+                    <Divider />
+                    <MenuRow
+                      icon={mode === "pro" ? "person-outline" : "flash-outline"}
+                      label={t(mode === "pro" ? "profileSwitchToCustomer" : "profileSwitchToPro")}
+                      onPress={() => setMode(mode === "pro" ? "customer" : "pro")}
+                      hideChevron
+                    >
+                      <Ionicons name="swap-horizontal" size={18} color={colors.brand} />
+                    </MenuRow>
+                  </>
+                ) : null}
               </>
             ) : null}
           </SettingsGroup>

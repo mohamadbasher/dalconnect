@@ -41,6 +41,7 @@ import {
 import { useToast } from "../../components/Toast";
 import type { Booking, BookingUrgency, Offer, OfferStatus } from "../../lib/types";
 import { PROFILE_FIELDS } from "../../lib/queries";
+import { ProApprovalGate } from "../../components/ProApprovalGate";
 
 const ETA_PRESETS = [30, 60, 90, 120];
 
@@ -191,6 +192,13 @@ export default function DashboardScreen() {
       supabase.removeChannel(channel);
     };
   }, [uid, load]);
+
+  // Approved professionals only. The database already refuses to show them
+  // open work or accept a quote (migration 20260714000017); without this the
+  // refusal would just look like an empty screen and a broken app.
+  if (professional && professional.verification_status !== "approved") {
+    return <ProApprovalGate status={professional.verification_status} />;
+  }
 
   if (!isPro || !professional || !uid) {
     return (

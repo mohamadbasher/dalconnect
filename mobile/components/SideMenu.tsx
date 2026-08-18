@@ -60,7 +60,7 @@ function MenuRow({
 export function SideMenu({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { colors, mode: themeMode, setMode: setThemeMode, dark } = useTheme();
   const { t, lang, setLang } = useI18n();
-  const { profile, professional, isPro, mode, setMode } = useAuth();
+  const { profile, professional, isPro, canSwitchMode, mode, setMode } = useAuth();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -117,7 +117,7 @@ export function SideMenu({ visible, onClose }: { visible: boolean; onClose: () =
                 <Text numberOfLines={1} style={[RTL_TEXT, { color: "#fff", fontSize: 16, fontWeight: "800" }]}>
                   {profile?.full_name || ""}
                 </Text>
-                {isPro ? (
+                {canSwitchMode ? (
                   <Badge
                     label={mode === "pro" ? t("tabDashboard") : t("tabHome")}
                     tone="gold"
@@ -133,11 +133,11 @@ export function SideMenu({ visible, onClose }: { visible: boolean; onClose: () =
           </View>
 
           <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md }}>
-            {/* Pro-mode switch — replaces the old top-bar toggle. Shown only to
-                accounts that ARE professionals; the "join as a professional"
-                row that used to sit in the else branch is gone, since providers
-                now register on their own track from the login screen. */}
-            {isPro ? (
+            {/* Mode switch — staff only. A provider account has no customer
+                half to switch to: the two are separate signups on the same
+                phone, so a professional who wants the customer side signs in to
+                their customer account. Admins keep it because they run both. */}
+            {canSwitchMode ? (
               <MenuRow
                 icon={mode === "pro" ? "person-outline" : "briefcase-outline"}
                 label={mode === "pro" ? t("menuSwitchToCustomer") : t("menuSwitchToPro")}
