@@ -300,14 +300,44 @@ export default function JobScreen() {
     }
   };
 
+  const submitFinish = async (n: number) => {
+    const ok = await setStatus("completed", { final_price: n });
+    if (ok) setFinishOpen(false);
+  };
+
   const confirmFinish = async () => {
     const n = parseFloat(finalPrice.replace(",", "."));
     if (!finalPrice.trim() || !Number.isFinite(n) || n <= 0) {
       setFinalPriceError(t("proFinalPriceInvalid"));
       return;
     }
-    const ok = await setStatus("completed", { final_price: n });
-    if (ok) setFinishOpen(false);
+
+    /**
+     * Charging above the quoted range is legitimate — the range was an estimate
+     * made before seeing the work, and extra work gets agreed on site. So this
+     * does NOT block it.
+     *
+     * But completing is terminal: it writes the ledger, bills the customer and
+     * computes commission, with no undo. A missing decimal point (7000 for 700)
+     * would sail straight through. So a figure far outside the estimate gets
+     * read back once. 1.5x leaves the ordinary "we agreed a bit more" case
+     * completely untouched.
+     */
+    // numerics come back from Postgres as strings
+    const max = rangeMax == null ? null : Number(rangeMax);
+    if (max !== null && Number.isFinite(max) && max > 0 && n > max * 1.5) {
+      Alert.alert(
+        t("proFinalPriceCheckTitle"),
+        t("proFinalPriceCheckBody", { amount: formatPrice(n), range: rangeLabel ?? formatPrice(max) }),
+        [
+          { text: t("cancel"), style: "cancel" },
+          { text: t("proFinalPriceCheckConfirm"), onPress: () => submitFinish(n) },
+        ]
+      );
+      return;
+    }
+
+    submitFinish(n);
   };
 
   return (

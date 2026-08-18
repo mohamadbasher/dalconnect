@@ -107,7 +107,11 @@ export const pro: Dict = {
     ar: "أقل سعر يجب ألا يتجاوز أعلى سعر",
     he: "המחיר המינימלי לא יכול להיות גבוה מהמקסימלי",
   },
-  quoteAgreedRange: { ar: "نطاق السعر المتفق عليه", he: "טווח המחיר שסוכם" },
+  // "the range in the quote", not "the agreed price": it is an estimate made
+  // before seeing the work, and the final price legitimately differs from it.
+  // Calling both "agreed" made a completed job look self-contradictory —
+  // "agreed ₪200–600" sitting above "final ₪700".
+  quoteAgreedRange: { ar: "نطاق السعر بالعرض", he: "טווח המחיר בהצעה" },
   quoteFinalOnPhone: {
     ar: "اتفق مع العميل على السعر النهائي بالهاتف",
     he: "סכמו עם הלקוח את המחיר הסופי בטלפון",
@@ -130,7 +134,6 @@ export const pro: Dict = {
   proAddressLabel: { ar: "العنوان", he: "כתובת" },
   proScheduleLabel: { ar: "الموعد", he: "מועד" },
   proAsap: { ar: "في أقرب وقت ممكن", he: "בהקדם האפשרי" },
-  agreedPrice: { ar: "السعر المتفق عليه", he: "המחיר שסוכם" },
   proCashNote: { ar: "الدفع نقداً عند إتمام العمل", he: "התשלום במזומן בסיום העבודה" },
   navigate: { ar: "التوجه عبر الخرائط", he: "ניווט" },
   progressTitle: { ar: "مراحل العمل", he: "שלבי העבודה" },
@@ -157,6 +160,15 @@ export const pro: Dict = {
     ar: "أدخل مبلغاً صحيحاً أكبر من صفر",
     he: "הזינו סכום תקין הגדול מאפס",
   },
+  // Charging above the estimate is fine and is NOT blocked. This only reads a
+  // far-out figure back once, because completing writes the ledger and cannot
+  // be undone — a missing decimal point would otherwise go straight through.
+  proFinalPriceCheckTitle: { ar: "نتأكد من المبلغ؟", he: "לוודא את הסכום?" },
+  proFinalPriceCheckBody: {
+    ar: "رح تسجّل {amount}، وهو أعلى بكثير من عرضك ({range}). زيادة السعر عادية إذا الشغل طلع أكبر — بس ما في رجعة بعد التأكيد.",
+    he: "אתם עומדים לרשום {amount}, הרבה מעל ההצעה שלכם ({range}). מחיר גבוה יותר הוא לגיטימי אם העבודה התרחבה — רק שאין דרך לחזור אחרי האישור.",
+  },
+  proFinalPriceCheckConfirm: { ar: "آه، هذا هو المبلغ", he: "כן, זה הסכום" },
   proFinalPriceConfirm: { ar: "تأكيد وإنهاء العمل", he: "אישור וסיום העבודה" },
   earningsForJob: { ar: "أرباحك من هذا العمل", he: "הרווח שלך מהעבודה" },
   grossAmount: { ar: "المبلغ الإجمالي", he: "סכום כולל" },

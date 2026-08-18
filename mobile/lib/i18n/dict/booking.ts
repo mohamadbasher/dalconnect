@@ -213,8 +213,8 @@ export const booking: Dict = {
   },
 
   // ----- money on the request -----
-  quoteAgreedPriceLabel: { ar: "السعر المتفق عليه", he: "המחיר שסוכם" },
-  quoteFinalPriceLabel: { ar: "المبلغ النهائي", he: "הסכום הסופי" },
+  quoteAgreedPriceLabel: { ar: "نطاق السعر بالعرض", he: "טווח המחיר בהצעה" },
+  quoteFinalPriceLabel: { ar: "السعر النهائي", he: "המחיר הסופי" },
   quoteRangeNote: {
     ar: "يُتفق على السعر النهائي مع المهني ضمن هذا النطاق، والدفع نقداً",
     he: "המחיר הסופי נקבע מול בעל המקצוע בתוך הטווח הזה, והתשלום במזומן",
