@@ -553,25 +553,48 @@ export default function DashboardScreen() {
       </ScrollView>
 
       {/* ---------- quote sheet: a price RANGE, an arrival time, an optional note ---------- */}
+      {/* Quote sheet.
+          Two things this gets right that the previous version didn't:
+          the overlay and `justifyContent: "flex-end"` live on the
+          KeyboardAvoidingView, so the sheet is pinned to the bottom edge
+          instead of floating with the page showing beneath it; and the
+          scrolling happens INSIDE a fixed sheet container rather than the
+          ScrollView being the sheet, which is what let its height wander.
+          Same structure as every other bottom sheet in the app. */}
       <Modal visible={!!quoteFor} transparent animationType="slide" onRequestClose={() => setQuoteFor(null)}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-          <Pressable style={{ flex: 1, backgroundColor: colors.overlay }} onPress={() => setQuoteFor(null)} />
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            style={{ maxHeight: "85%" }}
-            contentContainerStyle={{
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}
+        >
+          <Pressable style={{ flex: 1 }} onPress={() => setQuoteFor(null)} />
+          <View
+            style={{
               backgroundColor: colors.card,
               borderTopLeftRadius: radius.xl,
               borderTopRightRadius: radius.xl,
-              padding: spacing.lg,
-              paddingBottom: insets.bottom + spacing.xl,
-              gap: spacing.lg,
+              maxHeight: "88%",
             }}
           >
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{
+                padding: spacing.lg,
+                paddingBottom: spacing.xl,
+                gap: spacing.lg,
+              }}
+            >
             <SheetHandle />
 
-            <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
-              <View style={{ flexShrink: 1, gap: 3 }}>
+            {/* Row is row-reverse, so the FIRST child sits on the right — which
+                is where a close button belongs in an RTL sheet, and where every
+                other screen's back/close control already is. */}
+            <View style={{ ...ROW, gap: spacing.md, alignItems: "flex-start" }}>
+              <Pressable onPress={() => setQuoteFor(null)} hitSlop={10} style={{ paddingTop: 2 }}>
+                <Ionicons name="close" size={22} color={colors.muted} />
+              </Pressable>
+              {/* flex, not space-between: the title should sit beside the close
+                  button, not get flung to the opposite edge of the sheet */}
+              <View style={{ flex: 1, gap: 3 }}>
                 <Text style={[RTL_TEXT, { color: colors.text, fontSize: 18, fontWeight: "800" }]}>
                   {t("sendOffer")}
                 </Text>
@@ -582,9 +605,6 @@ export default function DashboardScreen() {
                   </Text>
                 ) : null}
               </View>
-              <Pressable onPress={() => setQuoteFor(null)} hitSlop={10}>
-                <Ionicons name="close" size={22} color={colors.muted} />
-              </Pressable>
             </View>
 
             {/* price range */}
@@ -666,7 +686,11 @@ export default function DashboardScreen() {
             />
 
             <Button title={t("send")} icon="send" loading={sending} onPress={submitQuote} />
-          </ScrollView>
+            </ScrollView>
+            {/* the home-indicator gap belongs to the sheet, not to the scrolling
+                content — otherwise it scrolls away with everything else */}
+            <View style={{ height: insets.bottom }} />
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     </View>
