@@ -1,7 +1,7 @@
 // Pro dashboard — availability, and the open-request feed the pro quotes on.
 // Customers no longer pick a professional: they post a request, every pro in the
 // trade is invited, and the quote is a PRICE RANGE + arrival time.
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -37,7 +37,9 @@ import {
   SectionHeader,
   SheetHandle,
   SkeletonList,
+  pressCard,
 } from "../../components/ui";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useToast } from "../../components/Toast";
 import type { Booking, BookingUrgency, Offer, OfferStatus } from "../../lib/types";
 import { PROFILE_FIELDS } from "../../lib/queries";
@@ -84,6 +86,16 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [available, setAvailable] = useState(professional?.is_available ?? true);
   const [openReqs, setOpenReqs] = useState<Booking[]>([]);
+  /**
+   * Jobs whose quote was just accepted.
+   *
+   * Winning work used to make the card silently vanish from this list — correct
+   * as data (it stopped being an open request) and awful as feedback: the one
+   * moment worth celebrating looked identical to losing the job to someone
+   * else. They stay here, transformed, until acknowledged.
+   */
+  const [wonJobs, setWonJobs] = useState<Booking[]>([]);
+  const [seenWon, setSeenWon] = useState<string[]>([]);
   const [myOffers, setMyOffers] = useState<Record<string, Offer>>({});
   const [pendingOffersCount, setPendingOffersCount] = useState(0);
   const [activeJobsCount, setActiveJobsCount] = useState(0);
@@ -133,6 +145,17 @@ export default function DashboardScreen() {
       });
       setOpenReqs(open);
 
+      // Jobs I've just won. Fetched alongside the open list so the card can
+      // stay in place rather than disappearing the instant it's accepted.
+      const { data: wonData } = await supabase
+        .from("bookings")
+        .select(`*, category:categories(*), customer:profiles!bookings_customer_id_fkey(${PROFILE_FIELDS}), city:cities(*)`)
+        .eq("professional_id", uid)
+        .eq("status", "accepted")
+        .order("accepted_at", { ascending: false })
+        .limit(10);
+      setWonJobs((wonData as unknown as Booking[]) ?? []);
+
       const ids = open.map((b) => b.id);
       if (ids.length) {
         const { data: offerData } = await supabase
@@ -171,6 +194,55 @@ export default function DashboardScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const SEEN_WON_KEY = "dalconnect.seenWonJobs";
+  useEffect(() => {
+    AsyncStorage.getItem(SEEN_WON_KEY)
+      .then((raw: string | null) => setSeenWon(raw ? (JSON.parse(raw) as string[]) : []))
+      .catch(() => setSeenWon([]));
+  }, []);
+
+  /** acknowledged — stop showing the celebration card for this job */
+  const dismissWon = useCallback(
+    (id: string) => {
+      setSeenWon((prev) => {
+        if (prev.includes(id)) return prev;
+        const next = [...prev, id].slice(-50); // a cap, not a leak
+        AsyncStorage.setItem(SEEN_WON_KEY, JSON.stringify(next)).catch(() => {});
+        return next;
+      });
+    },
+    []
+  );
+
+  // The cards worth showing: won, and not yet acknowledged.
+  const freshWins = wonJobs.filter((b) => !seenWon.includes(b.id));
+
+  /**
+   * Announce a win the moment it happens.
+   *
+   * The realtime handler below already refetches on any booking change, so "an
+   * id appeared in freshWins that wasn't there before" is the signal — no extra
+   * subscription, and it fires whether the news arrived by websocket or by
+   * pull-to-refresh. The first pass only seeds: a job that was already accepted
+   * when the screen opened is not news.
+   */
+  const announcedRef = useRef<Set<string> | null>(null);
+  const freshWinKey = freshWins.map((b) => b.id).join(",");
+  useEffect(() => {
+    const ids = new Set(freshWins.map((b) => b.id));
+    if (announcedRef.current === null) {
+      announcedRef.current = ids;
+      return;
+    }
+    // one toast even if two land together — this is a nudge, not a log
+    if ([...ids].some((id) => !announcedRef.current!.has(id))) {
+      toast.success(t("offerAcceptedToastPro"));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    }
+    announcedRef.current = ids;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [freshWinKey]);
 
   useEffect(() => {
     if (!uid) return;
@@ -444,6 +516,90 @@ export default function DashboardScreen() {
             </View>
           ))}
         </View>
+
+        {/* ---------- jobs just won ----------
+             These sit where the request card was, rather than the card simply
+             vanishing. Winning and being passed over used to look identical:
+             the row disappeared either way. They stay until tapped. */}
+        {freshWins.length > 0 ? (
+          <View style={{ gap: spacing.md }}>
+            {freshWins.map((b) => (
+              <Pressable
+                key={b.id}
+                onPress={() => {
+                  dismissWon(b.id);
+                  router.push(`/job/${b.id}` as never);
+                }}
+                style={({ pressed }) => [
+                  {
+                    backgroundColor: colors.successTint,
+                    borderRadius: radius.lg,
+                    borderWidth: 1.5,
+                    borderColor: colors.success,
+                    padding: spacing.lg,
+                    gap: spacing.md,
+                  },
+                  pressed ? pressCard : null,
+                ]}
+              >
+                <View style={{ ...ROW, alignItems: "center", gap: spacing.md }}>
+                  <View
+                    style={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: radius.md,
+                      backgroundColor: colors.success,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Ionicons name="checkmark" size={22} color={colors.onBrand} />
+                  </View>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text style={[RTL_TEXT, { color: colors.success, fontSize: 15.5, fontWeight: "800" }]}>
+                      {t("wonJobTitle")}
+                    </Text>
+                    <Text numberOfLines={2} style={[RTL_TEXT, { color: colors.success, fontSize: 12.5, lineHeight: 18 }]}>
+                      {t("wonJobBody")}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* which job, so a provider holding three of these can tell them apart */}
+                <View style={{ ...ROW, alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.text, fontSize: 13.5, fontWeight: "700" }]}>
+                    {b.category ? loc(b.category, "name") : b.title}
+                  </Text>
+                  {b.city ? (
+                    <Text style={[RTL_TEXT, { color: colors.muted, fontSize: 12 }]}>· {loc(b.city, "name")}</Text>
+                  ) : null}
+                  {b.customer?.full_name ? (
+                    <Text numberOfLines={1} style={[RTL_TEXT, { color: colors.muted, fontSize: 12 }]}>
+                      · {b.customer.full_name}
+                    </Text>
+                  ) : null}
+                </View>
+
+                <View
+                  style={{
+                    ...ROW,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                    backgroundColor: colors.success,
+                    borderRadius: radius.md,
+                    paddingVertical: 12,
+                  }}
+                >
+                  <Text style={{ color: colors.onBrand, fontSize: 14.5, fontWeight: "800" }}>
+                    {t("wonJobCta")}
+                  </Text>
+                  <Ionicons name="chevron-back" size={15} color={colors.onBrand} />
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
 
         {/* ---------- open requests — the whole job of this screen ---------- */}
         <View style={{ gap: spacing.md }}>
