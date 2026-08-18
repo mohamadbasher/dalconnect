@@ -518,7 +518,10 @@ export default function BookingDetail() {
   // range that was agreed when the quote was accepted.
   const showFinal = isDone && finalPrice !== null;
   const priceText = showFinal ? formatPrice(finalPrice) : agreedRange;
-  const priceLabel = showFinal ? t("quoteFinalPriceLabel") : t("quoteAgreedPriceLabel");
+  // Names who set the figure. "המחיר הסופי" reads like a fact the app decided;
+  // it was the professional's number, agreed on the job, and saying so is the
+  // difference between a receipt and an announcement.
+  const priceLabel = showFinal ? t("quoteChargedByPro") : t("quoteAgreedPriceLabel");
   const categoryName = booking.category ? loc(booking.category, "name") : "";
   const jobTitle = booking.title || categoryName || t("category");
   const whatsappMessage = t("quoteWhatsAppPrefill", { title: booking.title || categoryName });
@@ -1177,6 +1180,18 @@ export default function BookingDetail() {
                           {priceText}
                         </Text>
                       </View>
+                      {/* Once there's a final figure, keep the original quote
+                          visible beneath it — demoted, but there. The customer
+                          should be able to see what they were quoted without
+                          having to remember it. */}
+                      {showFinal && agreedRange ? (
+                        <View style={{ ...ROW, justifyContent: "space-between", gap: 10 }}>
+                          <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12.5 }]}>
+                            {t("quoteAgreedPriceLabel")}
+                          </Text>
+                          <Text style={[MONEY_TEXT, { color: colors.faint, fontSize: 12.5 }]}>{agreedRange}</Text>
+                        </View>
+                      ) : null}
                       <View style={{ ...ROW, gap: 8 }}>
                         <Badge label={t("cash")} tone="success" />
                         <Text style={[RTL_TEXT, { color: colors.faint, fontSize: 12, flex: 1, lineHeight: 18 }]}>

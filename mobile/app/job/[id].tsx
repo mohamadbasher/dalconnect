@@ -230,6 +230,11 @@ export default function JobScreen() {
   const stepIdx = STEPS.indexOf(effectiveStatus);
   const showStepper = stepIdx >= 0;
   const isDone = booking.status === "completed" || booking.status === "rated";
+  /** what was actually charged, once it exists — numerics arrive as strings */
+  const finalCharged =
+    booking.final_price == null || !Number.isFinite(Number(booking.final_price))
+      ? null
+      : Number(booking.final_price);
 
   // what the pro actually earns from: the final agreed price, with sensible fallbacks
   const gross = booking.final_price ?? booking.price ?? booking.price_min ?? 0;
@@ -415,8 +420,40 @@ export default function JobScreen() {
             <Badge label={t(STATUS_KEY[booking.status])} tone={STATUS_TONE[booking.status]} />
           </View>
 
-          {/* the range the customer accepted */}
-          {rangeLabel ? (
+          {/* The money.
+              Before the job is done this is the estimate the customer accepted.
+              Once it IS done, the figure that matters is what was actually
+              charged — leaving the estimate as the headline made a finished job
+              read as a contradiction ("₪200–600" above "₪700"). The estimate
+              stays underneath, demoted, because it is still worth being able to
+              see what was originally quoted. */}
+          {finalCharged !== null ? (
+            <View
+              style={{
+                backgroundColor: colors.brandTint,
+                borderRadius: radius.md,
+                padding: spacing.md,
+                gap: 4,
+              }}
+            >
+              <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
+                <Text style={[RTL_TEXT, { color: colors.brand, fontSize: 13, fontWeight: "700", flexShrink: 1 }]}>
+                  {t("proChargedLabel")}
+                </Text>
+                <Text style={[LTR, { color: colors.brand, fontSize: 18, fontWeight: "800" }]}>
+                  {formatPrice(finalCharged)}
+                </Text>
+              </View>
+              {rangeLabel ? (
+                <View style={{ ...ROW, justifyContent: "space-between", gap: 8 }}>
+                  <Text style={[RTL_TEXT, { color: colors.brand, fontSize: 12, opacity: 0.8, flexShrink: 1 }]}>
+                    {t("quoteAgreedRange")}
+                  </Text>
+                  <Text style={[LTR, { color: colors.brand, fontSize: 12, opacity: 0.8 }]}>{rangeLabel}</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : rangeLabel ? (
             <View
               style={{
                 backgroundColor: colors.brandTint,
@@ -431,11 +468,9 @@ export default function JobScreen() {
                 </Text>
                 <Text style={[LTR, { color: colors.brand, fontSize: 18, fontWeight: "800" }]}>{rangeLabel}</Text>
               </View>
-              {!isDone ? (
-                <Text style={[RTL_TEXT, { color: colors.brand, fontSize: 12, opacity: 0.85 }]}>
-                  {t("quoteFinalOnPhone")}
-                </Text>
-              ) : null}
+              <Text style={[RTL_TEXT, { color: colors.brand, fontSize: 12, opacity: 0.85 }]}>
+                {t("quoteFinalOnPhone")}
+              </Text>
             </View>
           ) : null}
 

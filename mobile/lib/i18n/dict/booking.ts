@@ -215,6 +215,9 @@ export const booking: Dict = {
   // ----- money on the request -----
   quoteAgreedPriceLabel: { ar: "نطاق السعر بالعرض", he: "טווח המחיר בהצעה" },
   quoteFinalPriceLabel: { ar: "السعر النهائي", he: "המחיר הסופי" },
+  // Attributes the figure. It was the professional's number, agreed on the
+  // job — saying so is the difference between a receipt and an announcement.
+  quoteChargedByPro: { ar: "المهني طلب", he: "בעל המקצוע ביקש" },
   quoteRangeNote: {
     ar: "يُتفق على السعر النهائي مع المهني ضمن هذا النطاق، والدفع نقداً",
     he: "המחיר הסופי נקבע מול בעל המקצוע בתוך הטווח הזה, והתשלום במזומן",

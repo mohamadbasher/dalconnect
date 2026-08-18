@@ -151,6 +151,8 @@ export const pro: Dict = {
     he: "לא הצלחנו לטעון את מספר הלקוח — משכו לרענון",
   },
   proFinalPriceTitle: { ar: "السعر النهائي", he: "המחיר הסופי" },
+  // On the pro's own screen the figure is theirs, so it is stated as such.
+  proChargedLabel: { ar: "المبلغ اللي طلبته", he: "הסכום שביקשתם" },
   proFinalPriceLabel: { ar: "المبلغ الذي اتفقتما عليه (₪)", he: "הסכום שסוכם (₪)" },
   proFinalPriceHint: {
     ar: "أدخل المبلغ الذي تقاضيته فعلاً من العميل — عمولة المنصة تُحتسب على أساسه.",
