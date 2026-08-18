@@ -15,7 +15,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { Image } from "expo-image";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { supabase } from "../../lib/supabase";
@@ -154,7 +154,7 @@ function BannerCarousel({ banners, width }: { banners: Banner[]; width: number }
 export default function HomeScreen() {
   const { colors, shadows } = useTheme();
   const { t, loc, lang } = useI18n();
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
   const router = useRouter();
   const { width } = useWindowDimensions();
 
@@ -246,6 +246,12 @@ export default function HomeScreen() {
   };
 
   if (!session) return null; // tabs layout redirects; safety guard
+  // A provider account has no customer side — the two are separate signups. The
+  // router entry already routes them to the dashboard, but this screen is still
+  // a reachable route (a deep link, a back-swipe, a stale nav state), and it is
+  // the customer service-picker, which is exactly what a provider should never
+  // be looking at.
+  if (profile?.role === "professional") return <Redirect href="/(tabs)/dashboard" />;
   if (loading) return <SkeletonList count={4} />;
 
   // the short, curated set that leads the screen

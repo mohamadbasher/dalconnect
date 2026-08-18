@@ -52,7 +52,9 @@ export default function SignInProvider() {
     setLoading(true);
     try {
       await signIn(providerNo.trim(), password);
-      router.replace("/(tabs)");
+      // "/" decides customer vs provider once the profile loads;
+      // "/(tabs)" is the CUSTOMER home and would strand every provider there.
+      router.replace("/");
     } catch (err: any) {
       const msg = String(err?.message ?? "");
       setFormError(/invalid login credentials/i.test(msg) ? t("authErrInvalidCredentials") : t("error"));

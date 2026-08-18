@@ -120,7 +120,9 @@ export default function RegisterProvider() {
     if (!issuedNo) return;
     try {
       await signIn(issuedNo, password);
-      router.replace("/(tabs)");
+      // "/" decides customer vs provider once the profile loads;
+      // "/(tabs)" is the CUSTOMER home and would strand every provider there.
+      router.replace("/");
     } catch {
       router.replace({ pathname: "/(auth)/sign-in", params: { notice: "created" } });
     }

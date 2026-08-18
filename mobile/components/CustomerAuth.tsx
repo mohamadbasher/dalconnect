@@ -111,7 +111,9 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
     setLoading(true);
     try {
       await signIn(id, password);
-      router.replace("/(tabs)");
+      // "/" decides customer vs provider once the profile loads;
+      // "/(tabs)" is the CUSTOMER home and would strand every provider there.
+      router.replace("/");
     } catch (err: any) {
       const msg = String(err?.message ?? "");
       setFormError(/invalid login credentials/i.test(msg) ? t("authErrInvalidCredentials") : t("error"));
@@ -160,7 +162,9 @@ export function CustomerAuth({ initialMode }: { initialMode: Mode }) {
     }
     try {
       await signIn(cleanPhone, password);
-      router.replace("/(tabs)");
+      // "/" decides customer vs provider once the profile loads;
+      // "/(tabs)" is the CUSTOMER home and would strand every provider there.
+      router.replace("/");
     } catch {
       // the account exists but the immediate sign-in failed — fall back to the form
       setLoading(false);
